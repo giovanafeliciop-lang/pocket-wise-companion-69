@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   Clock3,
+  Download,
   Plus,
   Sparkles,
   TrendingDown,
@@ -13,6 +14,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
+import { exportYearToExcel } from "@/lib/export";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/finance/StatCard";
 import { CategoryBreakdown } from "@/components/finance/CategoryBreakdown";
