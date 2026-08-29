@@ -186,8 +186,21 @@ function Dashboard() {
       </header>
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Entradas do mês" value={totals.income} icon={TrendingUp} tone="primary" />
-        <StatCard label="Gastos do mês" value={totals.expenses} icon={TrendingDown} tone="danger" />
+        <StatCard
+          label="Entradas do mês"
+          value={totals.income}
+          icon={TrendingUp}
+          tone="primary"
+          hint={monthHistory ? "Inclui histórico da planilha" : undefined}
+        />
+        <StatCard
+          label="Gastos do mês"
+          value={totals.expenses}
+          icon={TrendingDown}
+          tone="danger"
+          hint={monthHistory ? "Inclui histórico da planilha" : undefined}
+        />
+
         <StatCard
           label="Saldo"
           value={totals.balance}
