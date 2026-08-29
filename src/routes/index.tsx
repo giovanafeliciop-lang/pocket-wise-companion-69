@@ -82,19 +82,24 @@ function Dashboard() {
 
   const categories = categoriesQuery.data ?? [];
   const transactions = useMemo(() => monthQuery.data ?? [], [monthQuery.data]);
+  const monthHistory = useMemo(
+    () => (historyQuery.data ?? []).find((h) => h.month === month + 1),
+    [historyQuery.data, month],
+  );
 
   const totals = useMemo(() => {
-    const expenses = transactions
-      .filter((t) => t.kind === "expense")
-      .reduce((s, t) => s + t.amount, 0);
-    const income = transactions
-      .filter((t) => t.kind === "income")
-      .reduce((s, t) => s + t.amount, 0);
+    const expenses =
+      (monthHistory?.expenses ?? 0) +
+      transactions.filter((t) => t.kind === "expense").reduce((s, t) => s + t.amount, 0);
+    const income =
+      (monthHistory?.income ?? 0) +
+      transactions.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
     const pending = transactions
       .filter((t) => t.kind === "expense" && !t.is_paid)
       .reduce((s, t) => s + t.amount, 0);
     return { expenses, income, pending, balance: income - expenses };
-  }, [transactions]);
+  }, [transactions, monthHistory]);
+
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["transactions"] });
