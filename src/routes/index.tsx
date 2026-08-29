@@ -191,15 +191,16 @@ function Dashboard() {
           value={totals.income}
           icon={TrendingUp}
           tone="primary"
-          hint={monthHistory ? "Inclui histórico da planilha" : undefined}
+          {...(monthHistory ? { hint: "Inclui histórico da planilha" } : {})}
         />
         <StatCard
           label="Gastos do mês"
           value={totals.expenses}
           icon={TrendingDown}
           tone="danger"
-          hint={monthHistory ? "Inclui histórico da planilha" : undefined}
+          {...(monthHistory ? { hint: "Inclui histórico da planilha" } : {})}
         />
+
 
         <StatCard
           label="Saldo"
