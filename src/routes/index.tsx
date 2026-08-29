@@ -172,6 +172,16 @@ function Dashboard() {
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              exportYearToExcel(year, yearQuery.data ?? [], categories, historyQuery.data ?? []);
+              toast.success(`Planilha de ${year} exportada`);
+            }}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Exportar
+          </Button>
           <Button variant="secondary" onClick={() => setImportOpen(true)}>
             <Sparkles className="mr-2 h-4 w-4" />
             Importar fatura
