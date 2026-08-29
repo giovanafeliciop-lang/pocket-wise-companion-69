@@ -14,7 +14,110 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      categories: {
+        Row: {
+          color: string
+          created_at: string
+          icon: string
+          id: string
+          kind: string
+          name: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          icon?: string
+          id?: string
+          kind?: string
+          name: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          icon?: string
+          id?: string
+          kind?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      monthly_history: {
+        Row: {
+          expenses: number
+          id: string
+          income: number
+          month: number
+          year: number
+        }
+        Insert: {
+          expenses?: number
+          id?: string
+          income?: number
+          month: number
+          year: number
+        }
+        Update: {
+          expenses?: number
+          id?: string
+          income?: number
+          month?: number
+          year?: number
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          amount: number
+          category_id: string | null
+          created_at: string
+          description: string
+          id: string
+          is_paid: boolean
+          kind: string
+          notes: string | null
+          occurred_on: string
+          paid_at: string | null
+          payment_method: string
+          source: string
+        }
+        Insert: {
+          amount: number
+          category_id?: string | null
+          created_at?: string
+          description: string
+          id?: string
+          is_paid?: boolean
+          kind?: string
+          notes?: string | null
+          occurred_on?: string
+          paid_at?: string | null
+          payment_method?: string
+          source?: string
+        }
+        Update: {
+          amount?: number
+          category_id?: string | null
+          created_at?: string
+          description?: string
+          id?: string
+          is_paid?: boolean
+          kind?: string
+          notes?: string | null
+          occurred_on?: string
+          paid_at?: string | null
+          payment_method?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
