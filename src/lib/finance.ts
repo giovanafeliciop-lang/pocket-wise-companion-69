@@ -128,8 +128,12 @@ export type TransactionInput = {
 };
 
 export async function createTransactions(rows: TransactionInput[]) {
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) throw new Error("Sessão expirada. Entre novamente.");
   const payload = rows.map((r) => ({
     ...r,
+    user_id: userId,
     source: r.source ?? "manual",
     paid_at: r.is_paid ? new Date().toISOString() : null,
   }));
