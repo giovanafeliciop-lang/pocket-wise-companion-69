@@ -172,6 +172,18 @@ function Dashboard() {
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
+          <div className="flex items-center gap-1 rounded-xl border border-border bg-secondary/40 p-1">
+            {[2025, 2026].map((y) => (
+              <Button
+                key={y}
+                variant={year === y ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setYear(y)}
+              >
+                {y}
+              </Button>
+            ))}
+          </div>
           <Button
             variant="ghost"
             onClick={() => {
