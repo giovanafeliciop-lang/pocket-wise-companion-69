@@ -38,7 +38,7 @@ import {
   type TransactionInput,
 } from "@/lib/finance";
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
       { title: "Meu Painel Financeiro — Controle de gastos e receitas" },
