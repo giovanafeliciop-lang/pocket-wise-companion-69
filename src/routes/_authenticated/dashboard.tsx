@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
@@ -7,6 +7,7 @@ import {
   CircleDollarSign,
   Clock3,
   Download,
+  LogOut,
   Plus,
   Sparkles,
   TrendingDown,
@@ -15,6 +16,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportYearToExcel } from "@/lib/export";
+import { claimLegacyData } from "@/lib/claim.functions";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/finance/StatCard";
 import { CategoryBreakdown } from "@/components/finance/CategoryBreakdown";
@@ -60,6 +63,22 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 function Dashboard() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    void claimLegacyData().then((result) => {
+      if (result?.claimed) {
+        void queryClient.invalidateQueries();
+      }
+    });
+  }, [queryClient]);
+
+  const signOut = async () => {
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await supabase.auth.signOut();
+    await navigate({ to: "/auth", replace: true });
+  };
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -205,6 +224,9 @@ function Dashboard() {
           <Button onClick={() => openNew("expense")}>
             <Plus className="mr-2 h-4 w-4" />
             Despesa
+          </Button>
+          <Button variant="ghost" size="icon" title="Sair" onClick={() => void signOut()}>
+            <LogOut className="h-4 w-4" />
           </Button>
         </div>
       </header>
