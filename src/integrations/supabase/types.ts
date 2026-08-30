@@ -22,6 +22,7 @@ export type Database = {
           id: string
           kind: string
           name: string
+          user_id: string | null
         }
         Insert: {
           color?: string
@@ -30,6 +31,7 @@ export type Database = {
           id?: string
           kind?: string
           name: string
+          user_id?: string | null
         }
         Update: {
           color?: string
@@ -38,6 +40,7 @@ export type Database = {
           id?: string
           kind?: string
           name?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -47,6 +50,7 @@ export type Database = {
           id: string
           income: number
           month: number
+          user_id: string | null
           year: number
         }
         Insert: {
@@ -54,6 +58,7 @@ export type Database = {
           id?: string
           income?: number
           month: number
+          user_id?: string | null
           year: number
         }
         Update: {
@@ -61,6 +66,7 @@ export type Database = {
           id?: string
           income?: number
           month?: number
+          user_id?: string | null
           year?: number
         }
         Relationships: []
@@ -79,6 +85,7 @@ export type Database = {
           paid_at: string | null
           payment_method: string
           source: string
+          user_id: string | null
         }
         Insert: {
           amount: number
@@ -93,6 +100,7 @@ export type Database = {
           paid_at?: string | null
           payment_method?: string
           source?: string
+          user_id?: string | null
         }
         Update: {
           amount?: number
@@ -107,6 +115,7 @@ export type Database = {
           paid_at?: string | null
           payment_method?: string
           source?: string
+          user_id?: string | null
         }
         Relationships: [
           {
