@@ -193,6 +193,31 @@ export function TransactionDialog({
             </div>
           </div>
 
+          {method === "credito" ? (
+            <div className="space-y-2">
+              <Label>Qual cartão?</Label>
+              <Select value={cardName} onValueChange={setCardName}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecionar cartão" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CREDIT_CARDS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {cardName === "Outro" ? (
+                <Input
+                  value={customCard}
+                  onChange={(e) => setCustomCard(e.target.value)}
+                  placeholder="Nome do cartão"
+                />
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/40 px-4 py-3">
             <div>
               <p className="text-sm font-medium">
