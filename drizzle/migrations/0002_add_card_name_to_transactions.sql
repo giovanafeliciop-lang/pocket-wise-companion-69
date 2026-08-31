@@ -1,0 +1,1 @@
+ALTER TABLE public.transactions ADD COLUMN card_name TEXT;

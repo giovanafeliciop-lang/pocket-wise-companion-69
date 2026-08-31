@@ -30,6 +30,7 @@ export function exportYearToExcel(
     Descrição: t.description,
     Categoria: catName(t.category_id),
     Pagamento: paymentLabel(t.payment_method),
+    Cartão: t.card_name ?? "",
     "Valor (R$)": t.amount,
     Status: t.is_paid ? "Pago" : "Em aberto",
     Origem: t.source === "invoice" ? "Fatura" : "Manual",
@@ -37,9 +38,9 @@ export function exportYearToExcel(
   const wsTx = XLSX.utils.json_to_sheet(
     txRows.length
       ? txRows
-      : [{ Data: "", Tipo: "", Descrição: "Nenhum lançamento neste ano", Categoria: "", Pagamento: "", "Valor (R$)": "", Status: "", Origem: "" }],
+      : [{ Data: "", Tipo: "", Descrição: "Nenhum lançamento neste ano", Categoria: "", Pagamento: "", Cartão: "", "Valor (R$)": "", Status: "", Origem: "" }],
   );
-  wsTx["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 40 }, { wch: 22 }, { wch: 18 }, { wch: 14 }, { wch: 10 }, { wch: 10 }];
+  wsTx["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 40 }, { wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 10 }];
   XLSX.utils.book_append_sheet(wb, wsTx, "Lançamentos");
 
   // Aba 2: Gastos por categoria

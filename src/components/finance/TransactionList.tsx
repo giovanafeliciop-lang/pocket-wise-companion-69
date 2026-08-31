@@ -121,7 +121,7 @@ export function TransactionList({
                       {cat.name}
                     </Badge>
                   ) : null}
-                  <span>· {method}</span>
+                  <span>· {method}{t.card_name ? ` (${t.card_name})` : ""}</span>
                   {!t.is_paid ? <span className="text-warning">· em aberto</span> : null}
                 </div>
               </div>

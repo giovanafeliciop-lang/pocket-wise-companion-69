@@ -15,6 +15,13 @@
       "when": 1788057066537,
       "tag": "0001_add_auth_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788177576055,
+      "tag": "0002_add_card_name_to_transactions",
+      "breakpoints": true
     }
   ]
 }

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  CREDIT_CARDS,
   PAYMENT_METHODS,
   type Category,
   type Kind,
@@ -49,6 +50,8 @@ export function TransactionDialog({
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [categoryId, setCategoryId] = useState<string>("");
   const [method, setMethod] = useState("pix");
+  const [cardName, setCardName] = useState("");
+  const [customCard, setCustomCard] = useState("");
   const [isPaid, setIsPaid] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -61,6 +64,14 @@ export function TransactionDialog({
       setDate(editing.occurred_on);
       setCategoryId(editing.category_id ?? "");
       setMethod(editing.payment_method);
+      const known = (CREDIT_CARDS as readonly string[]).includes(editing.card_name ?? "");
+      if (editing.card_name && !known) {
+        setCardName("Outro");
+        setCustomCard(editing.card_name);
+      } else {
+        setCardName(editing.card_name ?? "");
+        setCustomCard("");
+      }
       setIsPaid(editing.is_paid);
     } else {
       setKind(defaultKind);
@@ -69,6 +80,8 @@ export function TransactionDialog({
       setDate(new Date().toISOString().slice(0, 10));
       setCategoryId("");
       setMethod("pix");
+      setCardName("");
+      setCustomCard("");
       setIsPaid(defaultKind === "income");
     }
   }, [open, editing, defaultKind]);
@@ -78,6 +91,8 @@ export function TransactionDialog({
   const handleSave = async () => {
     const value = Number(amount.replace(/\./g, "").replace(",", "."));
     if (!description.trim() || !value) return;
+    const resolvedCard =
+      method === "credito" ? (cardName === "Outro" ? customCard.trim() : cardName) || null : null;
     setSaving(true);
     try {
       await onSubmit({
@@ -87,6 +102,7 @@ export function TransactionDialog({
         occurred_on: date,
         category_id: categoryId || null,
         payment_method: method,
+        card_name: resolvedCard,
         is_paid: isPaid,
       });
       onOpenChange(false);
@@ -176,6 +192,31 @@ export function TransactionDialog({
               </Select>
             </div>
           </div>
+
+          {method === "credito" ? (
+            <div className="space-y-2">
+              <Label>Qual cartão?</Label>
+              <Select value={cardName} onValueChange={setCardName}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecionar cartão" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CREDIT_CARDS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {cardName === "Outro" ? (
+                <Input
+                  value={customCard}
+                  onChange={(e) => setCustomCard(e.target.value)}
+                  placeholder="Nome do cartão"
+                />
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/40 px-4 py-3">
             <div>
