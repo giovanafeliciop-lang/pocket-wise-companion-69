@@ -18,6 +18,7 @@ export type Transaction = {
   occurred_on: string;
   category_id: string | null;
   payment_method: string;
+  card_name: string | null;
   is_paid: boolean;
   paid_at: string | null;
   source: string;
@@ -32,6 +33,18 @@ export type MonthlyHistory = {
   expenses: number;
   income: number;
 };
+
+export const CREDIT_CARDS = [
+  "Nubank G",
+  "Elo",
+  "Santander GOL",
+  "Amazon",
+  "C6",
+  "XP",
+  "Mercado Pago",
+  "Picpay",
+  "Outro",
+] as const;
 
 export const PAYMENT_METHODS = [
   { value: "pix", label: "Pix" },
@@ -122,6 +135,7 @@ export type TransactionInput = {
   occurred_on: string;
   category_id: string | null;
   payment_method: string;
+  card_name?: string | null;
   is_paid: boolean;
   source?: string;
   notes?: string | null;
