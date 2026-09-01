@@ -181,28 +181,41 @@ function Dashboard() {
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 rounded-xl border border-border bg-secondary/40 p-1">
-            <Button variant="ghost" size="icon" onClick={() => shiftMonth(-1)}>
+            <Button variant="ghost" size="icon" onClick={() => shiftMonth(-1)} aria-label="Mês anterior">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="min-w-36 text-center text-sm font-medium">
-              {MONTH_NAMES[month]} {year}
-            </span>
-            <Button variant="ghost" size="icon" onClick={() => shiftMonth(1)}>
+            <Select
+              value={String(month)}
+              onValueChange={(v) => setMonth(Number(v))}
+            >
+              <SelectTrigger className="h-9 w-32 border-0 bg-transparent text-sm font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MONTH_NAMES.map((name, i) => (
+                  <SelectItem key={name} value={String(i)}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+              <SelectTrigger className="h-9 w-24 border-0 bg-transparent text-sm font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[2024, 2025, 2026, 2027].map((y) => (
+                  <SelectItem key={y} value={String(y)}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="ghost" size="icon" onClick={() => shiftMonth(1)} aria-label="Próximo mês">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <div className="flex items-center gap-1 rounded-xl border border-border bg-secondary/40 p-1">
-            {[2025, 2026].map((y) => (
-              <Button
-                key={y}
-                variant={year === y ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setYear(y)}
-              >
-                {y}
-              </Button>
-            ))}
-          </div>
+
           <Button
             variant="ghost"
             onClick={() => {
