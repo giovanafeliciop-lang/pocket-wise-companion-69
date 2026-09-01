@@ -19,6 +19,14 @@ import { exportYearToExcel } from "@/lib/export";
 import { claimLegacyData } from "@/lib/claim.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 import { StatCard } from "@/components/finance/StatCard";
 import { CategoryBreakdown } from "@/components/finance/CategoryBreakdown";
 import { YearOverview } from "@/components/finance/YearOverview";
