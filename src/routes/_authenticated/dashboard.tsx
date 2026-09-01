@@ -71,6 +71,26 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 });
 
+function DashboardError({ error, reset }: { error: Error; reset: () => void }) {
+  const router = useRouter();
+  return (
+    <main className="mx-auto flex min-h-[60vh] w-full max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
+      <h1 className="font-display text-xl font-semibold">Algo deu errado no painel</h1>
+      <p className="text-sm text-muted-foreground">{error.message}</p>
+      <Button
+        onClick={() => {
+          void router.invalidate();
+          reset();
+        }}
+      >
+        Tentar novamente
+      </Button>
+    </main>
+  );
+}
+
+
+
 function Dashboard() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
