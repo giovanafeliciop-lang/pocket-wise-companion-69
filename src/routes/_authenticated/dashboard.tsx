@@ -67,6 +67,8 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
     ],
   }),
   component: Dashboard,
+  errorComponent: DashboardError,
+
 });
 
 function Dashboard() {
