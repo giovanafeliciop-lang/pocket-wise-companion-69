@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
@@ -19,6 +19,14 @@ import { exportYearToExcel } from "@/lib/export";
 import { claimLegacyData } from "@/lib/claim.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 import { StatCard } from "@/components/finance/StatCard";
 import { CategoryBreakdown } from "@/components/finance/CategoryBreakdown";
 import { YearOverview } from "@/components/finance/YearOverview";
@@ -59,7 +67,29 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
     ],
   }),
   component: Dashboard,
+  errorComponent: DashboardError,
+
 });
+
+function DashboardError({ error, reset }: { error: Error; reset: () => void }) {
+  const router = useRouter();
+  return (
+    <main className="mx-auto flex min-h-[60vh] w-full max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
+      <h1 className="font-display text-xl font-semibold">Algo deu errado no painel</h1>
+      <p className="text-sm text-muted-foreground">{error.message}</p>
+      <Button
+        onClick={() => {
+          void router.invalidate();
+          reset();
+        }}
+      >
+        Tentar novamente
+      </Button>
+    </main>
+  );
+}
+
+
 
 function Dashboard() {
   const queryClient = useQueryClient();
@@ -181,28 +211,41 @@ function Dashboard() {
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 rounded-xl border border-border bg-secondary/40 p-1">
-            <Button variant="ghost" size="icon" onClick={() => shiftMonth(-1)}>
+            <Button variant="ghost" size="icon" onClick={() => shiftMonth(-1)} aria-label="Mês anterior">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="min-w-36 text-center text-sm font-medium">
-              {MONTH_NAMES[month]} {year}
-            </span>
-            <Button variant="ghost" size="icon" onClick={() => shiftMonth(1)}>
+            <Select
+              value={String(month)}
+              onValueChange={(v) => setMonth(Number(v))}
+            >
+              <SelectTrigger className="h-9 w-32 border-0 bg-transparent text-sm font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MONTH_NAMES.map((name, i) => (
+                  <SelectItem key={name} value={String(i)}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+              <SelectTrigger className="h-9 w-24 border-0 bg-transparent text-sm font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[2024, 2025, 2026, 2027].map((y) => (
+                  <SelectItem key={y} value={String(y)}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="ghost" size="icon" onClick={() => shiftMonth(1)} aria-label="Próximo mês">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <div className="flex items-center gap-1 rounded-xl border border-border bg-secondary/40 p-1">
-            {[2025, 2026].map((y) => (
-              <Button
-                key={y}
-                variant={year === y ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setYear(y)}
-              >
-                {y}
-              </Button>
-            ))}
-          </div>
+
           <Button
             variant="ghost"
             onClick={() => {
