@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "sonner";
 import {
   CREDIT_CARDS,
   PAYMENT_METHODS,
@@ -88,9 +89,29 @@ export function TransactionDialog({
 
   const options = categories.filter((c) => c.kind === kind);
 
+  const parseAmount = (raw: string) => {
+    const cleaned = raw.replace(/[^\d.,-]/g, "").trim();
+    if (!cleaned) return NaN;
+    const normalized = cleaned.includes(",")
+      ? cleaned.replace(/\./g, "").replace(",", ".")
+      : cleaned;
+    return Number(normalized);
+  };
+
   const handleSave = async () => {
-    const value = Number(amount.replace(/\./g, "").replace(",", "."));
-    if (!description.trim() || !value) return;
+    const value = parseAmount(amount);
+    if (!description.trim()) {
+      toast.error("Informe a descrição do lançamento");
+      return;
+    }
+    if (!Number.isFinite(value) || value === 0) {
+      toast.error("Informe um valor válido (ex.: 150,00)");
+      return;
+    }
+    if (!date) {
+      toast.error("Informe a data do lançamento");
+      return;
+    }
     const resolvedCard =
       method === "credito" ? (cardName === "Outro" ? customCard.trim() : cardName) || null : null;
     setSaving(true);
@@ -106,6 +127,8 @@ export function TransactionDialog({
         is_paid: isPaid,
       });
       onOpenChange(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Não foi possível salvar");
     } finally {
       setSaving(false);
     }
