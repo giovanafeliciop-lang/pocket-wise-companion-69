@@ -338,93 +338,95 @@ function Dashboard() {
         </div>
       </header>
 
-      {/* Banner de Lembrete: Contas Vencendo Hoje em Aberto */}
-      {dueTodayExpenses.length > 0 ? (
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-800 dark:text-amber-200 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
-              <Bell className="h-5 w-5" />
+      {/* Conteúdo dinâmico do mês selecionado com chave estável */}
+      <div key={`month-view-${year}-${month}`} className="space-y-6">
+        {/* Banner de Lembrete: Contas Vencendo Hoje em Aberto */}
+        {dueTodayExpenses.length > 0 ? (
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-800 dark:text-amber-200 shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                <Bell className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm text-foreground">
+                  {`Você tem ${dueTodayExpenses.length} ${dueTodayExpenses.length === 1 ? "conta" : "contas"} vencendo hoje (${brl(totalDueToday)}) em aberto`}
+                </p>
+                <p className="text-muted-foreground text-[11px] mt-0.5">
+                  Os lembretes são enviados de forma 100% automática por e-mail no dia do vencimento.
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold text-sm text-foreground">
-                Você tem {dueTodayExpenses.length} {dueTodayExpenses.length === 1 ? "conta" : "contas"} vencendo hoje ({brl(totalDueToday)}) em aberto
-              </p>
-              <p className="text-muted-foreground text-[11px] mt-0.5">
-                Os lembretes são enviados de forma 100% automática por e-mail no dia do vencimento.
-              </p>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs border-amber-500/40 text-amber-800 dark:text-amber-200 hover:bg-amber-500/20"
+                onClick={() => setNotificationOpen(true)}
+              >
+                <Bell className="mr-1.5 h-3.5 w-3.5" />
+                Ver lembretes por e-mail
+              </Button>
             </div>
           </div>
+        ) : null}
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs border-amber-500/40 text-amber-800 dark:text-amber-200 hover:bg-amber-500/20"
-              onClick={() => setNotificationOpen(true)}
-            >
-              <Bell className="mr-1.5 h-3.5 w-3.5" />
-              Ver lembretes por e-mail
-            </Button>
-          </div>
-        </div>
-      ) : null}
+        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="Entradas do mês"
+            value={totals.income}
+            icon={TrendingUp}
+            tone="primary"
+            {...(monthHistory ? { hint: "Inclui histórico da planilha" } : {})}
+          />
+          <StatCard
+            label="Gastos do mês"
+            value={totals.expenses}
+            icon={TrendingDown}
+            tone="danger"
+            {...(monthHistory ? { hint: "Inclui histórico da planilha" } : {})}
+          />
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Entradas do mês"
-          value={totals.income}
-          icon={TrendingUp}
-          tone="primary"
-          {...(monthHistory ? { hint: "Inclui histórico da planilha" } : {})}
-        />
-        <StatCard
-          label="Gastos do mês"
-          value={totals.expenses}
-          icon={TrendingDown}
-          tone="danger"
-          {...(monthHistory ? { hint: "Inclui histórico da planilha" } : {})}
-        />
+          <StatCard
+            label="Saldo"
+            value={totals.balance}
+            icon={Wallet}
+            tone={totals.balance >= 0 ? "primary" : "danger"}
+            hint={totals.balance >= 0 ? "Você está no azul" : "Atenção ao vermelho"}
+          />
+          <StatCard
+            label="A pagar"
+            value={totals.pending}
+            icon={Clock3}
+            tone="warning"
+            hint={`${transactions.filter((t) => t.kind === "expense" && !t.is_paid).length} despesas em aberto`}
+          />
+        </section>
 
+        <section className="mt-6 grid gap-4 lg:grid-cols-2">
+          <CategoryBreakdown transactions={transactions} categories={categories} />
+          <YearOverview year={year} history={historyQuery.data ?? []} transactions={yearQuery.data ?? []} />
+        </section>
 
-        <StatCard
-          label="Saldo"
-          value={totals.balance}
-          icon={Wallet}
-          tone={totals.balance >= 0 ? "primary" : "danger"}
-          hint={totals.balance >= 0 ? "Você está no azul" : "Atenção ao vermelho"}
-        />
-        <StatCard
-          label="A pagar"
-          value={totals.pending}
-          icon={Clock3}
-          tone="warning"
-          hint={`${transactions.filter((t) => t.kind === "expense" && !t.is_paid).length} despesas em aberto`}
-        />
-      </section>
+        <section className="mt-6">
+          <TransactionList
+            transactions={transactions}
+            categories={categories}
+            onTogglePaid={(t) => paidMutation.mutate(t)}
+            onToggleBatchPaid={(ids, isPaid) => batchPaidMutation.mutate({ ids, isPaid })}
+            onEdit={(t) => {
+              setEditing(t);
+              setDialogOpen(true);
+            }}
+            onDelete={(t) => deleteMutation.mutate(t)}
+          />
+        </section>
 
-      <section className="mt-6 grid gap-4 lg:grid-cols-2">
-        <CategoryBreakdown transactions={transactions} categories={categories} />
-        <YearOverview year={year} history={historyQuery.data ?? []} transactions={yearQuery.data ?? []} />
-      </section>
-
-      <section className="mt-6">
-        <TransactionList
-          transactions={transactions}
-          categories={categories}
-          onTogglePaid={(t) => paidMutation.mutate(t)}
-          onToggleBatchPaid={(ids, isPaid) => batchPaidMutation.mutate({ ids, isPaid })}
-          onEdit={(t) => {
-            setEditing(t);
-            setDialogOpen(true);
-          }}
-          onDelete={(t) => deleteMutation.mutate(t)}
-        />
-      </section>
-
-      <footer className="mt-8 flex items-center gap-2 text-xs text-muted-foreground">
-        <CircleDollarSign className="h-3.5 w-3.5" />
-        Total lançado em {MONTH_NAMES[month]}: {brl(totals.income + totals.expenses)}
-      </footer>
+        <footer className="mt-8 flex items-center gap-2 text-xs text-muted-foreground">
+          <CircleDollarSign className="h-3.5 w-3.5" />
+          <span>{`Total lançado em ${MONTH_NAMES[month]}: ${brl(totals.income + totals.expenses)}`}</span>
+        </footer>
+      </div>
 
       <TransactionDialog
         open={dialogOpen}

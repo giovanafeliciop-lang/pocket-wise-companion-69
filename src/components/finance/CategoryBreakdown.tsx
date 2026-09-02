@@ -29,11 +29,11 @@ export function CategoryBreakdown({ transactions, categories }: Props) {
       <p className="text-xs text-muted-foreground">Somando pix, dinheiro e cartão</p>
 
       {data.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">
-          Sem despesas neste mês ainda.
-        </p>
+        <div className="py-12 text-center text-sm text-muted-foreground">
+          <p>Sem despesas neste mês ainda.</p>
+        </div>
       ) : (
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div key="category-data" className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -46,8 +46,8 @@ export function CategoryBreakdown({ transactions, categories }: Props) {
                   paddingAngle={2}
                   stroke="none"
                 >
-                  {data.map((d) => (
-                    <Cell key={d.name} fill={d.color} />
+                  {data.map((d, i) => (
+                    <Cell key={`cell-${d.name}-${i}`} fill={d.color} />
                   ))}
                 </Pie>
                 <Tooltip
@@ -64,15 +64,15 @@ export function CategoryBreakdown({ transactions, categories }: Props) {
           </div>
 
           <div className="space-y-2">
-            {data.map((d) => (
-              <div key={d.name} className="space-y-1">
+            {data.map((d, i) => (
+              <div key={`cat-row-${d.name}-${i}`} className="space-y-1">
                 <div className="flex items-center justify-between text-sm">
                   <span className="flex items-center gap-2">
                     <span
                       className="h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: d.color }}
                     />
-                    {d.name}
+                    <span>{d.name}</span>
                   </span>
                   <span className="numeric text-muted-foreground">{brl(d.value)}</span>
                 </div>
@@ -80,7 +80,7 @@ export function CategoryBreakdown({ transactions, categories }: Props) {
                   <div
                     className="h-full rounded-full"
                     style={{
-                      width: `${total ? (d.value / total) * 100 : 0}%`,
+                      width: `${total > 0 ? (d.value / total) * 100 : 0}%`,
                       backgroundColor: d.color,
                     }}
                   />

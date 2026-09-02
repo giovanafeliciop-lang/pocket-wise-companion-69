@@ -125,7 +125,7 @@ export function TransactionList({
               <CreditCard className="h-3.5 w-3.5 text-primary" /> Faturas de Cartão de Crédito
             </h3>
             <span className="text-[11px] text-muted-foreground">
-              {cardInvoices.length} {cardInvoices.length === 1 ? "fatura ativa" : "faturas ativas"}
+              {`${cardInvoices.length} ${cardInvoices.length === 1 ? "fatura ativa" : "faturas ativas"}`}
             </span>
           </div>
 
@@ -178,12 +178,12 @@ export function TransactionList({
                                 variant="outline"
                                 className="border-warning text-warning bg-warning/10 text-[10px] px-1.5 py-0 h-4.5"
                               >
-                                {openCount} em aberto
+                                {`${openCount} em aberto`}
                               </Badge>
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            {items.length} {items.length === 1 ? "compra lançada" : "compras lançadas"}
+                            {`${items.length} ${items.length === 1 ? "compra lançada" : "compras lançadas"}`}
                           </p>
                         </div>
                         <span className="numeric text-sm font-bold text-foreground">
@@ -197,9 +197,9 @@ export function TransactionList({
                           <div className="flex items-center justify-between text-[11px] font-medium text-amber-800 dark:text-amber-200">
                             <span className="flex items-center gap-1">
                               <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
-                              Pago: {brl(paidTotal)} ({paidCount} de {items.length})
+                              {`Pago: ${brl(paidTotal)} (${paidCount} de ${items.length})`}
                             </span>
-                            <span>Falta: {brl(openTotal)}</span>
+                            <span>{`Falta: ${brl(openTotal)}`}</span>
                           </div>
                           <div className="h-1.5 w-full overflow-hidden rounded-full bg-amber-500/20">
                             <div
@@ -208,7 +208,7 @@ export function TransactionList({
                             />
                           </div>
                           <p className="text-[10px] text-amber-700 dark:text-amber-300 opacity-90">
-                            ⚠️ Alerta: Restam <strong>{brl(openTotal)}</strong> pendentes nesta fatura.
+                            {`⚠️ Alerta: Restam ${brl(openTotal)} pendentes nesta fatura.`}
                           </p>
                         </div>
                       ) : null}
@@ -229,7 +229,8 @@ export function TransactionList({
                           </>
                         ) : (
                           <>
-                            <ChevronDown className="h-3.5 w-3.5" /> Ver / Pagar itens ({items.length})
+                            <ChevronDown className="h-3.5 w-3.5" />
+                            {`Ver / Pagar itens (${items.length})`}
                           </>
                         )}
                       </Button>
@@ -261,7 +262,8 @@ export function TransactionList({
                               onToggleBatchPaid?.(openIds, true);
                             }}
                           >
-                            <Check className="h-3 w-3" /> Pagar restante ({brl(openTotal)})
+                            <Check className="h-3 w-3" />
+                            {`Pagar restante (${brl(openTotal)})`}
                           </Button>
                         ) : (
                           <Button
@@ -422,10 +424,9 @@ export function TransactionList({
                     </Badge>
                   ) : null}
                   <span>
-                    · {method}
-                    {t.card_name ? ` (${t.card_name})` : ""}
+                    {`· ${method ?? ""}${t.card_name ? ` (${t.card_name})` : ""}`}
                   </span>
-                  {t.notes ? <span>· {t.notes}</span> : null}
+                  {t.notes ? <span>{`· ${t.notes}`}</span> : null}
                   {!t.is_paid ? <span className="text-warning">· em aberto</span> : null}
                 </div>
               </div>
@@ -436,7 +437,7 @@ export function TransactionList({
                   income ? "text-primary" : "text-foreground",
                 )}
               >
-                {income ? "+" : "−"} {brl(t.amount)}
+                {`${income ? "+" : "−"} ${brl(t.amount)}`}
               </span>
 
               <div className="flex shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
