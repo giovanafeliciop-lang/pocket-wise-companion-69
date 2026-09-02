@@ -341,6 +341,11 @@ function Dashboard() {
         editing={editing}
         onSubmit={async (values) => {
           await saveMutation.mutateAsync(values);
+          const [y, m] = values.occurred_on.split("-").map(Number);
+          if (y && m) {
+            setYear(y);
+            setMonth(m - 1);
+          }
         }}
       />
 
