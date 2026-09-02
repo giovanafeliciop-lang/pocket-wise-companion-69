@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { FileText, ImageIcon, Loader2, Sparkles, Trash2, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CreditCard, FileText, ImageIcon, Loader2, Sparkles, Trash2, Upload } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -23,12 +23,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { parseInvoice } from "@/lib/invoice.functions";
-import { brl, type Category, type TransactionInput } from "@/lib/finance";
+import {
+  CREDIT_CARDS,
+  brl,
+  formatDate,
+  type Category,
+  type TransactionInput,
+} from "@/lib/finance";
 
 type Draft = {
   description: string;
   amount: number;
-  occurred_on: string;
+  purchase_date: string;
   category_id: string | null;
 };
 
@@ -36,10 +42,17 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   categories: Category[];
+  defaultDate?: string;
   onConfirm: (rows: TransactionInput[]) => Promise<void>;
 };
 
-export function InvoiceImportDialog({ open, onOpenChange, categories, onConfirm }: Props) {
+export function InvoiceImportDialog({
+  open,
+  onOpenChange,
+  categories,
+  defaultDate,
+  onConfirm,
+}: Props) {
   const parse = useServerFn(parseInvoice);
   const fileInput = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
@@ -48,19 +61,33 @@ export function InvoiceImportDialog({ open, onOpenChange, categories, onConfirm 
   const [saving, setSaving] = useState(false);
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
 
+  const [cardName, setCardName] = useState<string>("Nubank G");
+  const [customCard, setCustomCard] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState(
+    defaultDate || new Date().toISOString().slice(0, 10),
+  );
+
+  useEffect(() => {
+    if (open && defaultDate) {
+      setInvoiceDate(defaultDate);
+    }
+  }, [open, defaultDate]);
+
   const expenseCats = categories.filter((c) => c.kind === "expense");
   const catNames = expenseCats.map((c) => c.name);
 
   const normalize = (s: string) =>
     s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
-  const toDrafts = (items: Array<{ description: string; amount: number; occurred_on: string; category: string }>) =>
+  const toDrafts = (
+    items: Array<{ description: string; amount: number; occurred_on: string; category: string }>,
+  ) =>
     items.map((i) => {
       const itemNorm = normalize(i.category);
       return {
         description: i.description,
         amount: i.amount,
-        occurred_on: i.occurred_on,
+        purchase_date: i.occurred_on,
         category_id:
           expenseCats.find((c) => normalize(c.name) === itemNorm)?.id ??
           expenseCats.find((c) => c.name === "Outros")?.id ??
@@ -108,6 +135,9 @@ export function InvoiceImportDialog({ open, onOpenChange, categories, onConfirm 
     }
   };
 
+  const resolvedCard =
+    cardName === "Outro" ? customCard.trim() || "Cartão de Crédito" : cardName || "Cartão";
+
   const confirm = async () => {
     if (!drafts?.length) return;
     setSaving(true);
@@ -117,14 +147,16 @@ export function InvoiceImportDialog({ open, onOpenChange, categories, onConfirm 
           kind: "expense" as const,
           description: d.description,
           amount: d.amount,
-          occurred_on: d.occurred_on,
+          occurred_on: invoiceDate, // Todas as compras entram no mês de vencimento da fatura!
           category_id: d.category_id,
           payment_method: "credito",
+          card_name: resolvedCard,
           is_paid: false,
           source: "fatura",
+          notes: d.purchase_date ? `Compra em ${formatDate(d.purchase_date)}` : null,
         })),
       );
-      toast.success(`${drafts.length} lançamentos importados`);
+      toast.success(`${drafts.length} lançamentos da fatura (${resolvedCard}) importados!`);
       reset();
       onOpenChange(false);
     } catch (e) {
@@ -157,10 +189,60 @@ export function InvoiceImportDialog({ open, onOpenChange, categories, onConfirm 
             Importar fatura do cartão
           </DialogTitle>
           <DialogDescription>
-            Envie o PDF, uma foto ou cole o texto da fatura. A IA separa cada compra por categoria e
-            você revisa antes de salvar.
+            Envie a fatura para extrair cada compra com sua categoria. Todos os gastos serão
+            unificados na fatura do mês selecionado.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Configuração do Cartão e Vencimento */}
+        <div className="rounded-xl border border-border bg-secondary/30 p-3.5 space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium flex items-center gap-1.5">
+                <CreditCard className="h-3.5 w-3.5 text-primary" />
+                Qual cartão é esta fatura?
+              </Label>
+              <Select value={cardName} onValueChange={setCardName}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Selecionar cartão" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CREDIT_CARDS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {cardName === "Outro" ? (
+                <Input
+                  value={customCard}
+                  onChange={(e) => setCustomCard(e.target.value)}
+                  placeholder="Nome do cartão"
+                  className="h-8 mt-1.5 text-xs"
+                />
+              ) : null}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="invoice-date" className="text-xs font-medium">
+                Vencimento / Mês da Fatura
+              </Label>
+              <Input
+                id="invoice-date"
+                type="date"
+                value={invoiceDate}
+                onChange={(e) => setInvoiceDate(e.target.value)}
+                className="h-9"
+              />
+            </div>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground border-t border-border/40 pt-2">
+            ℹ️ Independente do dia em que cada compra foi feita, todos os lançamentos entrarão na
+            fatura de <strong>{formatDate(invoiceDate)}</strong> e serão classificados por categoria.
+          </p>
+        </div>
 
         {!drafts ? (
           <Tabs defaultValue="file">
@@ -220,54 +302,58 @@ export function InvoiceImportDialog({ open, onOpenChange, categories, onConfirm 
           </Tabs>
         ) : (
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">
-                {drafts.length} lançamentos encontrados
+            <div className="flex items-center justify-between rounded-xl bg-secondary/40 px-3 py-2 text-sm">
+              <span className="text-xs text-muted-foreground">
+                <strong>{drafts.length}</strong> compras identificadas em{" "}
+                <strong className="text-foreground">{resolvedCard}</strong>
               </span>
-              <span className="numeric font-semibold">{brl(total)}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Total da fatura:</span>
+                <span className="numeric font-bold text-foreground">{brl(total)}</span>
+              </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
               {drafts.map((d, index) => (
                 <div
                   key={`${d.description}-${index}`}
-                  className="grid grid-cols-12 items-center gap-2 rounded-xl border border-border bg-secondary/30 p-2"
+                  className="grid grid-cols-12 items-center gap-2 rounded-xl border border-border bg-secondary/30 p-2 text-xs"
                 >
-                  <Input
-                    className="col-span-12 sm:col-span-4"
-                    value={d.description}
-                    onChange={(e) =>
-                      setDrafts((prev) =>
-                        prev!.map((row, i) =>
-                          i === index ? { ...row, description: e.target.value } : row,
-                        ),
-                      )
-                    }
-                  />
-                  <Input
-                    className="col-span-5 sm:col-span-2"
-                    type="date"
-                    value={d.occurred_on}
-                    onChange={(e) =>
-                      setDrafts((prev) =>
-                        prev!.map((row, i) =>
-                          i === index ? { ...row, occurred_on: e.target.value } : row,
-                        ),
-                      )
-                    }
-                  />
-                  <Input
-                    className="numeric col-span-4 sm:col-span-2"
-                    value={d.amount}
-                    onChange={(e) =>
-                      setDrafts((prev) =>
-                        prev!.map((row, i) =>
-                          i === index ? { ...row, amount: Number(e.target.value) || 0 } : row,
-                        ),
-                      )
-                    }
-                  />
-                  <div className="col-span-2 sm:col-span-3">
+                  <div className="col-span-12 sm:col-span-5 space-y-0.5">
+                    <Input
+                      className="h-8 text-xs"
+                      value={d.description}
+                      onChange={(e) =>
+                        setDrafts((prev) =>
+                          prev!.map((row, i) =>
+                            i === index ? { ...row, description: e.target.value } : row,
+                          ),
+                        )
+                      }
+                      placeholder="Descrição"
+                    />
+                    {d.purchase_date ? (
+                      <p className="text-[10px] text-muted-foreground px-1">
+                        Data original: {formatDate(d.purchase_date)}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="col-span-4 sm:col-span-3">
+                    <Input
+                      className="numeric h-8 text-xs font-semibold"
+                      value={d.amount}
+                      onChange={(e) =>
+                        setDrafts((prev) =>
+                          prev!.map((row, i) =>
+                            i === index ? { ...row, amount: Number(e.target.value) || 0 } : row,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+
+                  <div className="col-span-7 sm:col-span-3">
                     <Select
                       value={d.category_id ?? ""}
                       onValueChange={(v) =>
@@ -276,7 +362,7 @@ export function InvoiceImportDialog({ open, onOpenChange, categories, onConfirm 
                         )
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="h-8 text-xs">
                         <SelectValue placeholder="Categoria" />
                       </SelectTrigger>
                       <SelectContent>
@@ -288,13 +374,14 @@ export function InvoiceImportDialog({ open, onOpenChange, categories, onConfirm 
                       </SelectContent>
                     </Select>
                   </div>
+
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="col-span-1"
+                    className="col-span-1 h-8 w-8 text-muted-foreground hover:text-destructive"
                     onClick={() => setDrafts((prev) => prev!.filter((_, i) => i !== index))}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               ))}
@@ -309,7 +396,7 @@ export function InvoiceImportDialog({ open, onOpenChange, categories, onConfirm 
                 Recomeçar
               </Button>
               <Button onClick={confirm} disabled={saving || !drafts.length}>
-                {saving ? "Salvando..." : `Salvar ${drafts.length} lançamentos`}
+                {saving ? "Salvando..." : `Importar ${drafts.length} compras na fatura`}
               </Button>
             </>
           ) : null}

@@ -85,6 +85,28 @@ export const monthRange = (year: number, month: number) => {
   return { start, end };
 };
 
+export function calculateRecurringDates(startDateStr: string, totalMonths: number): string[] {
+  if (totalMonths <= 1 || !startDateStr) return [startDateStr];
+  const parts = startDateStr.split("-");
+  if (parts.length < 3) return [startDateStr];
+  const baseYear = parseInt(parts[0] || "", 10);
+  const baseMonth = parseInt(parts[1] || "", 10);
+  const baseDay = parseInt(parts[2] || "", 10);
+  if (isNaN(baseYear) || isNaN(baseMonth) || isNaN(baseDay)) return [startDateStr];
+
+  const dates: string[] = [];
+  for (let i = 0; i < totalMonths; i++) {
+    const totalMonthIndex = baseYear * 12 + (baseMonth - 1) + i;
+    const y = Math.floor(totalMonthIndex / 12);
+    const m = (totalMonthIndex % 12) + 1;
+    const maxDaysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const d = Math.min(baseDay, maxDaysInMonth);
+    const formatted = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    dates.push(formatted);
+  }
+  return dates;
+}
+
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: "cat-moradia", name: "Moradia", kind: "expense", color: "#6366f1", icon: "home" },
   { id: "cat-alimentacao", name: "Alimentação", kind: "expense", color: "#f59e0b", icon: "utensils" },
@@ -229,6 +251,15 @@ export async function togglePaid(id: string, isPaid: boolean) {
     .from("transactions")
     .update({ is_paid: isPaid, paid_at: isPaid ? new Date().toISOString() : null })
     .eq("id", id);
+  if (error) throw error;
+}
+
+export async function toggleBatchPaid(ids: string[], isPaid: boolean) {
+  if (ids.length === 0) return;
+  const { error } = await supabase
+    .from("transactions")
+    .update({ is_paid: isPaid, paid_at: isPaid ? new Date().toISOString() : null })
+    .in("id", ids);
   if (error) throw error;
 }
 

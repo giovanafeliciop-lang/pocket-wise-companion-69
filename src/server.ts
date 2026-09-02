@@ -47,6 +47,31 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+      if (url.pathname === "/api/cron/reminders") {
+        try {
+          const { executeDailyReminders } = await import("./lib/notifications.server");
+          const targetDate = url.searchParams.get("date") || undefined;
+          const result = await executeDailyReminders(targetDate);
+          return new Response(JSON.stringify(result, null, 2), {
+            status: 200,
+            headers: { "content-type": "application/json; charset=utf-8" },
+          });
+        } catch (e) {
+          console.error("[Cron Handler Error]:", e);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: e instanceof Error ? e.message : "Erro desconhecido",
+            }),
+            {
+              status: 500,
+              headers: { "content-type": "application/json; charset=utf-8" },
+            },
+          );
+        }
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

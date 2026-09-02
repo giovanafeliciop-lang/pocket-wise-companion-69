@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Bell,
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
@@ -33,6 +34,7 @@ import { YearOverview } from "@/components/finance/YearOverview";
 import { TransactionList } from "@/components/finance/TransactionList";
 import { TransactionDialog } from "@/components/finance/TransactionDialog";
 import { InvoiceImportDialog } from "@/components/finance/InvoiceImportDialog";
+import { EmailNotificationDialog } from "@/components/finance/EmailNotificationDialog";
 import {
   MONTH_NAMES,
   brl,
@@ -43,6 +45,7 @@ import {
   fetchTransactions,
   fetchYearTransactions,
   togglePaid,
+  toggleBatchPaid,
   updateTransaction,
   type Kind,
   type Transaction,
@@ -114,8 +117,16 @@ function Dashboard() {
   const [month, setMonth] = useState(now.getMonth());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
   const [defaultKind, setDefaultKind] = useState<Kind>("expense");
   const [editing, setEditing] = useState<Transaction | null>(null);
+
+  useEffect(() => {
+    void supabase.auth.getUser().then(({ data }) => {
+      if (data?.user?.email) setUserEmail(data.user.email);
+    });
+  }, []);
 
   const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
   const monthQuery = useQuery({
@@ -138,6 +149,17 @@ function Dashboard() {
     [historyQuery.data, month],
   );
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const dueTodayExpenses = useMemo(() => {
+    return transactions.filter(
+      (t) => t.kind === "expense" && !t.is_paid && t.occurred_on === todayStr,
+    );
+  }, [transactions, todayStr]);
+
+  const totalDueToday = useMemo(() => {
+    return dueTodayExpenses.reduce((sum, t) => sum + t.amount, 0);
+  }, [dueTodayExpenses]);
+
   const totals = useMemo(() => {
     const expenses =
       (monthHistory?.expenses ?? 0) +
@@ -158,13 +180,29 @@ function Dashboard() {
   };
 
   const saveMutation = useMutation({
-    mutationFn: async (values: TransactionInput) => {
-      if (editing) await updateTransaction(editing.id, values);
-      else await createTransactions([values]);
+    mutationFn: async (values: TransactionInput | TransactionInput[]) => {
+      if (editing) {
+        const single = Array.isArray(values) ? values[0] : values;
+        if (!single) return;
+        await updateTransaction(editing.id, single);
+      } else {
+        const rows = Array.isArray(values) ? values : [values];
+        if (rows.length === 0) return;
+        await createTransactions(rows);
+      }
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       invalidate();
-      toast.success(editing ? "Lançamento atualizado" : "Lançamento adicionado");
+      const isMultiple = Array.isArray(variables) && variables.length > 1;
+      if (editing) {
+        toast.success("Lançamento atualizado");
+      } else if (isMultiple) {
+        toast.success(
+          `${(variables as TransactionInput[]).length} lançamentos recorrentes adicionados com sucesso!`,
+        );
+      } else {
+        toast.success("Lançamento adicionado");
+      }
       setEditing(null);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -173,6 +211,18 @@ function Dashboard() {
   const paidMutation = useMutation({
     mutationFn: (t: Transaction) => togglePaid(t.id, !t.is_paid),
     onSuccess: invalidate,
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const batchPaidMutation = useMutation({
+    mutationFn: ({ ids, isPaid }: { ids: string[]; isPaid: boolean }) =>
+      toggleBatchPaid(ids, isPaid),
+    onSuccess: (_, variables) => {
+      invalidate();
+      toast.success(
+        variables.isPaid ? "Fatura marcada como paga!" : "Fatura reaberta com sucesso!",
+      );
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -260,6 +310,20 @@ function Dashboard() {
             <Sparkles className="mr-2 h-4 w-4" />
             Importar fatura
           </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative"
+            title="Lembretes por e-mail"
+            onClick={() => setNotificationOpen(true)}
+          >
+            <Bell className="h-4 w-4" />
+            {dueTodayExpenses.length > 0 ? (
+              <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white shadow-xs">
+                {dueTodayExpenses.length}
+              </span>
+            ) : null}
+          </Button>
           <Button variant="outline" onClick={() => openNew("income")}>
             <TrendingUp className="mr-2 h-4 w-4" />
             Entrada
@@ -273,6 +337,37 @@ function Dashboard() {
           </Button>
         </div>
       </header>
+
+      {/* Banner de Lembrete: Contas Vencendo Hoje em Aberto */}
+      {dueTodayExpenses.length > 0 ? (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-800 dark:text-amber-200 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
+              <Bell className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm text-foreground">
+                Você tem {dueTodayExpenses.length} {dueTodayExpenses.length === 1 ? "conta" : "contas"} vencendo hoje ({brl(totalDueToday)}) em aberto
+              </p>
+              <p className="text-muted-foreground text-[11px] mt-0.5">
+                Os lembretes são enviados de forma 100% automática por e-mail no dia do vencimento.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs border-amber-500/40 text-amber-800 dark:text-amber-200 hover:bg-amber-500/20"
+              onClick={() => setNotificationOpen(true)}
+            >
+              <Bell className="mr-1.5 h-3.5 w-3.5" />
+              Ver lembretes por e-mail
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -317,6 +412,7 @@ function Dashboard() {
           transactions={transactions}
           categories={categories}
           onTogglePaid={(t) => paidMutation.mutate(t)}
+          onToggleBatchPaid={(ids, isPaid) => batchPaidMutation.mutate({ ids, isPaid })}
           onEdit={(t) => {
             setEditing(t);
             setDialogOpen(true);
@@ -341,7 +437,8 @@ function Dashboard() {
         editing={editing}
         onSubmit={async (values) => {
           await saveMutation.mutateAsync(values);
-          const [y, m] = values.occurred_on.split("-").map(Number);
+          const firstDate = (Array.isArray(values) ? values[0]?.occurred_on : values.occurred_on) ?? "";
+          const [y, m] = firstDate.split("-").map(Number);
           if (y && m) {
             setYear(y);
             setMonth(m - 1);
@@ -353,10 +450,19 @@ function Dashboard() {
         open={importOpen}
         onOpenChange={setImportOpen}
         categories={categories}
+        defaultDate={`${year}-${String(month + 1).padStart(2, "0")}-10`}
         onConfirm={async (rows) => {
           await createTransactions(rows);
           invalidate();
         }}
+      />
+
+      <EmailNotificationDialog
+        open={notificationOpen}
+        onOpenChange={setNotificationOpen}
+        userEmail={userEmail}
+        transactions={transactions}
+        categories={categories}
       />
     </main>
   );

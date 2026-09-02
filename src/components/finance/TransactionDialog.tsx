@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,6 +23,8 @@ import { toast } from "sonner";
 import {
   CREDIT_CARDS,
   PAYMENT_METHODS,
+  brl,
+  calculateRecurringDates,
   type Category,
   type Kind,
   type Transaction,
@@ -34,7 +37,7 @@ type Props = {
   categories: Category[];
   defaultKind?: Kind;
   editing?: Transaction | null;
-  onSubmit: (values: TransactionInput) => Promise<void>;
+  onSubmit: (values: TransactionInput | TransactionInput[]) => Promise<void>;
 };
 
 export function TransactionDialog({
@@ -54,6 +57,8 @@ export function TransactionDialog({
   const [cardName, setCardName] = useState("");
   const [customCard, setCustomCard] = useState("");
   const [isPaid, setIsPaid] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringMonths, setRecurringMonths] = useState(2);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -74,6 +79,8 @@ export function TransactionDialog({
         setCustomCard("");
       }
       setIsPaid(editing.is_paid);
+      setIsRecurring(false);
+      setRecurringMonths(2);
     } else {
       setKind(defaultKind);
       setDescription("");
@@ -84,6 +91,8 @@ export function TransactionDialog({
       setCardName("");
       setCustomCard("");
       setIsPaid(defaultKind === "income");
+      setIsRecurring(false);
+      setRecurringMonths(2);
     }
   }, [open, editing, defaultKind]);
 
@@ -116,16 +125,31 @@ export function TransactionDialog({
       method === "credito" ? (cardName === "Outro" ? customCard.trim() : cardName) || null : null;
     setSaving(true);
     try {
-      await onSubmit({
-        kind,
-        description: description.trim(),
-        amount: Math.abs(value),
-        occurred_on: date,
-        category_id: categoryId || null,
-        payment_method: method,
-        card_name: resolvedCard,
-        is_paid: isPaid,
-      });
+      if (!editing && isRecurring && recurringMonths > 1) {
+        const dates = calculateRecurringDates(date, recurringMonths);
+        const rows: TransactionInput[] = dates.map((occurredDate, index) => ({
+          kind,
+          description: description.trim(),
+          amount: Math.abs(value),
+          occurred_on: occurredDate,
+          category_id: categoryId || null,
+          payment_method: method,
+          card_name: resolvedCard,
+          is_paid: index === 0 ? isPaid : false,
+        }));
+        await onSubmit(rows);
+      } else {
+        await onSubmit({
+          kind,
+          description: description.trim(),
+          amount: Math.abs(value),
+          occurred_on: date,
+          category_id: categoryId || null,
+          payment_method: method,
+          card_name: resolvedCard,
+          is_paid: isPaid,
+        });
+      }
       onOpenChange(false);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Não foi possível salvar");
@@ -134,9 +158,13 @@ export function TransactionDialog({
     }
   };
 
+  const parsedVal = parseAmount(amount);
+  const totalRecurringVal = Number.isFinite(parsedVal) ? Math.abs(parsedVal) * recurringMonths : 0;
+  const dayOfMonth = date ? Number(date.split("-")[2]) : null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-display">
             {editing ? "Editar lançamento" : "Novo lançamento"}
@@ -250,6 +278,98 @@ export function TransactionDialog({
             </div>
             <Switch checked={isPaid} onCheckedChange={setIsPaid} />
           </div>
+
+          {!editing ? (
+            <div className="rounded-xl border border-border bg-secondary/20 p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Repeat className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Lançamento recorrente</p>
+                    <p className="text-xs text-muted-foreground">
+                      Repetir por mais de 1 mês no mesmo dia
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
+              </div>
+
+              {isRecurring ? (
+                <div className="pt-2 border-t border-border/50 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="recurring-months" className="text-xs font-medium">
+                        Repetir por quantos meses?
+                      </Label>
+                      <span className="text-xs font-semibold text-primary">
+                        {recurringMonths} meses
+                      </span>
+                    </div>
+                    <Input
+                      id="recurring-months"
+                      type="number"
+                      min={2}
+                      max={60}
+                      value={recurringMonths}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val)) {
+                          setRecurringMonths(Math.max(2, Math.min(60, val)));
+                        } else {
+                          setRecurringMonths(2);
+                        }
+                      }}
+                      className="h-9"
+                    />
+                  </div>
+
+                  {/* Atalhos rápidos */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] text-muted-foreground mr-1">Atalhos:</span>
+                    {[2, 3, 6, 12, 24].map((num) => (
+                      <Button
+                        key={num}
+                        type="button"
+                        variant={recurringMonths === num ? "default" : "outline"}
+                        size="sm"
+                        className="h-6 px-2.5 text-xs rounded-full"
+                        onClick={() => setRecurringMonths(num)}
+                      >
+                        {num} meses
+                      </Button>
+                    ))}
+                  </div>
+
+                  {/* Resumo da recorrência */}
+                  <div className="rounded-lg bg-secondary/50 p-2.5 text-xs text-muted-foreground border border-border/40 space-y-1">
+                    <p className="font-medium text-foreground">
+                      Resumo da recorrência:
+                    </p>
+                    <p>
+                      Serão criados <strong>{recurringMonths} lançamentos</strong>
+                      {dayOfMonth ? (
+                        <>
+                          {" "}sempre no <strong>dia {dayOfMonth}</strong> de cada mês
+                        </>
+                      ) : null}
+                      {totalRecurringVal > 0 ? (
+                        <>
+                          , totalizando <strong>{brl(totalRecurringVal)}</strong> ({recurringMonths}x de {brl(Number.isFinite(parsedVal) ? Math.abs(parsedVal) : 0)}).
+                        </>
+                      ) : (
+                        "."
+                      )}
+                    </p>
+                    <p className="text-[11px] opacity-80">
+                      O 1º mês respeita o status selecionado acima ({isPaid ? "pago/recebido" : "em aberto"}), e os meses subsequentes serão criados como em aberto.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <DialogFooter>
