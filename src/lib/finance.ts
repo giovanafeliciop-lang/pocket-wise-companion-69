@@ -85,10 +85,74 @@ export const monthRange = (year: number, month: number) => {
   return { start, end };
 };
 
+export const DEFAULT_CATEGORIES: Category[] = [
+  { id: "cat-moradia", name: "Moradia", kind: "expense", color: "#6366f1", icon: "home" },
+  { id: "cat-alimentacao", name: "Alimentação", kind: "expense", color: "#f59e0b", icon: "utensils" },
+  { id: "cat-transporte", name: "Transporte", kind: "expense", color: "#0ea5e9", icon: "car" },
+  { id: "cat-saude", name: "Saúde", kind: "expense", color: "#ef4444", icon: "heart-pulse" },
+  { id: "cat-educacao", name: "Educação", kind: "expense", color: "#8b5cf6", icon: "graduation-cap" },
+  { id: "cat-lazer", name: "Lazer", kind: "expense", color: "#ec4899", icon: "party-popper" },
+  { id: "cat-assinaturas", name: "Assinaturas", kind: "expense", color: "#14b8a6", icon: "repeat" },
+  { id: "cat-compras", name: "Compras", kind: "expense", color: "#f97316", icon: "shopping-bag" },
+  { id: "cat-dizimo", name: "Dízimo", kind: "expense", color: "#10b981", icon: "hand-heart" },
+  { id: "cat-telefone", name: "Telefone", kind: "expense", color: "#06b6d4", icon: "phone" },
+  { id: "cat-milhas", name: "Milhas", kind: "expense", color: "#eab308", icon: "plane" },
+  { id: "cat-contas", name: "Contas", kind: "expense", color: "#f43f5e", icon: "receipt" },
+  { id: "cat-outros", name: "Outros", kind: "expense", color: "#64748b", icon: "circle-dashed" },
+  { id: "cat-salario", name: "Salário", kind: "income", color: "#22c55e", icon: "wallet" },
+  { id: "cat-freelance", name: "Freelance", kind: "income", color: "#10b981", icon: "briefcase" },
+  { id: "cat-outras-entradas", name: "Outras entradas", kind: "income", color: "#84cc16", icon: "plus-circle" },
+];
+
 export async function fetchCategories(): Promise<Category[]> {
-  const { data, error } = await supabase.from("categories").select("*").order("name");
-  if (error) throw error;
-  return (data ?? []) as Category[];
+  try {
+    const { data, error } = await supabase.from("categories").select("*").order("name");
+    if (error) {
+      console.warn("Aviso ao buscar categorias do Supabase, usando padrão:", error);
+      return DEFAULT_CATEGORIES;
+    }
+
+    const dbCategories = (data ?? []) as Category[];
+    if (dbCategories.length === 0) {
+      return DEFAULT_CATEGORIES;
+    }
+
+    // Identifica se alguma das categorias padrão (ex: Dízimo, Telefone, Milhas, Contas) ainda não está no banco
+    const existingNames = new Set(
+      dbCategories.map((c) =>
+        c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
+      )
+    );
+    const missingDefaults = DEFAULT_CATEGORIES.filter(
+      (c) =>
+        !existingNames.has(
+          c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
+        )
+    );
+
+    if (missingDefaults.length > 0) {
+      // Tenta inserir automaticamente no banco em segundo plano
+      void (async () => {
+        try {
+          const toInsert = missingDefaults.map(({ name, kind, color, icon }) => ({
+            name,
+            kind,
+            color,
+            icon,
+          }));
+          await supabase.from("categories").insert(toInsert);
+        } catch {
+          // Ignora caso de permissão de RLS
+        }
+      })();
+
+      return [...dbCategories, ...missingDefaults].sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    return dbCategories;
+  } catch {
+    return DEFAULT_CATEGORIES;
+  }
 }
 
 export async function fetchTransactions(year: number, month: number): Promise<Transaction[]> {

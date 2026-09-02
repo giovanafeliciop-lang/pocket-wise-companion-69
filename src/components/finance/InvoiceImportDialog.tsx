@@ -51,16 +51,22 @@ export function InvoiceImportDialog({ open, onOpenChange, categories, onConfirm 
   const expenseCats = categories.filter((c) => c.kind === "expense");
   const catNames = expenseCats.map((c) => c.name);
 
+  const normalize = (s: string) =>
+    s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
   const toDrafts = (items: Array<{ description: string; amount: number; occurred_on: string; category: string }>) =>
-    items.map((i) => ({
-      description: i.description,
-      amount: i.amount,
-      occurred_on: i.occurred_on,
-      category_id:
-        expenseCats.find((c) => c.name.toLowerCase() === i.category.toLowerCase())?.id ??
-        expenseCats.find((c) => c.name === "Outros")?.id ??
-        null,
-    }));
+    items.map((i) => {
+      const itemNorm = normalize(i.category);
+      return {
+        description: i.description,
+        amount: i.amount,
+        occurred_on: i.occurred_on,
+        category_id:
+          expenseCats.find((c) => normalize(c.name) === itemNorm)?.id ??
+          expenseCats.find((c) => c.name === "Outros")?.id ??
+          null,
+      };
+    });
 
   const runText = async () => {
     if (!text.trim()) return;
