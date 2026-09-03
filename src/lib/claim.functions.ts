@@ -3,6 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 export const DEFAULT_CATEGORY_SEEDS = [
   { name: "Moradia", kind: "expense", color: "#6366f1", icon: "home" },
+  { name: "Mercado", kind: "expense", color: "#10b981", icon: "shopping-cart" },
   { name: "Alimentação", kind: "expense", color: "#f59e0b", icon: "utensils" },
   { name: "Transporte", kind: "expense", color: "#0ea5e9", icon: "car" },
   { name: "Saúde", kind: "expense", color: "#ef4444", icon: "heart-pulse" },
@@ -10,7 +11,7 @@ export const DEFAULT_CATEGORY_SEEDS = [
   { name: "Lazer", kind: "expense", color: "#ec4899", icon: "party-popper" },
   { name: "Assinaturas", kind: "expense", color: "#14b8a6", icon: "repeat" },
   { name: "Compras", kind: "expense", color: "#f97316", icon: "shopping-bag" },
-  { name: "Dízimo", kind: "expense", color: "#10b981", icon: "hand-heart" },
+  { name: "Dízimo", kind: "expense", color: "#059669", icon: "hand-heart" },
   { name: "Telefone", kind: "expense", color: "#06b6d4", icon: "phone" },
   { name: "Milhas", kind: "expense", color: "#eab308", icon: "plane" },
   { name: "Contas", kind: "expense", color: "#f43f5e", icon: "receipt" },

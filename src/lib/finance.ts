@@ -121,7 +121,39 @@ export function calculateRecurringDates(startDateStr: string, totalMonths: numbe
 export async function fetchCategories(): Promise<Category[]> {
   const { data, error } = await supabase.from("categories").select("*").order("name");
   if (error) throw error;
-  return (data ?? []) as Category[];
+  const list = (data ?? []) as Category[];
+
+  // Garante que a categoria Mercado exista no banco
+  const hasMercado = list.some(
+    (c) => c.name.toLowerCase().trim() === "mercado"
+  );
+
+  if (!hasMercado) {
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      const userId = auth.user?.id;
+      const { data: created, error: insertErr } = await supabase
+        .from("categories")
+        .insert({
+          name: "Mercado",
+          kind: "expense",
+          color: "#10b981",
+          icon: "shopping-cart",
+          ...(userId ? { user_id: userId } : {}),
+        })
+        .select("*")
+        .maybeSingle();
+
+      if (!insertErr && created) {
+        list.push(created as Category);
+        list.sort((a, b) => a.name.localeCompare(b.name));
+      }
+    } catch (e) {
+      console.warn("Nao foi possivel autoinserir Mercado:", e);
+    }
+  }
+
+  return list;
 }
 
 export async function resolveCategoryId(idOrName: string | null | undefined): Promise<string | null> {
@@ -153,42 +185,130 @@ export async function resolveCategoryId(idOrName: string | null | undefined): Pr
   let defaultColor = "#64748b";
   let defaultIcon = "tag";
 
-  if (upper.includes("TELEFONE") || upper.includes("CELULAR") || upper.includes("INTERNET") || upper.includes("VIVO") || upper.includes("CLARO") || upper.includes("TIM")) {
+  if (
+    upper.includes("MERCADO") ||
+    upper.includes("SUPERMERCADO") ||
+    upper.includes("HIPERMERCADO") ||
+    upper.includes("ATACADAO") ||
+    upper.includes("ASSAI") ||
+    upper.includes("CARREFOUR") ||
+    upper.includes("HORTIFRUTI") ||
+    upper.includes("SACOLAO") ||
+    upper.includes("ACOUGUE") ||
+    upper.includes("PAO DE ACUCAR")
+  ) {
+    searchName = "Mercado";
+    defaultColor = "#10b981";
+    defaultIcon = "shopping-cart";
+  } else if (
+    upper.includes("TELEFONE") ||
+    upper.includes("CELULAR") ||
+    upper.includes("INTERNET") ||
+    upper.includes("VIVO") ||
+    upper.includes("CLARO") ||
+    upper.includes("TIM")
+  ) {
     searchName = "Telefone / Internet";
     defaultColor = "#0284c7";
     defaultIcon = "phone";
-  } else if (upper.includes("CONTAS") || upper.includes("LUZ") || upper.includes("AGUA") || upper.includes("ENERGIA") || upper.includes("GAS")) {
+  } else if (
+    upper.includes("CONTAS") ||
+    upper.includes("LUZ") ||
+    upper.includes("AGUA") ||
+    upper.includes("ENERGIA") ||
+    upper.includes("GAS")
+  ) {
     searchName = "Contas Básicas";
-    defaultColor = "#f59e0b";
-    defaultIcon = "zap";
-  } else if (upper.includes("ALIMENTA") || upper.includes("MERCADO") || upper.includes("RESTAURANTE") || upper.includes("IFOOD") || upper.includes("PADARIA")) {
+    defaultColor = "#f43f5e";
+    defaultIcon = "receipt";
+  } else if (
+    upper.includes("ALIMENTA") ||
+    upper.includes("RESTAURANTE") ||
+    upper.includes("IFOOD") ||
+    upper.includes("PADARIA") ||
+    upper.includes("LANCHONETE") ||
+    upper.includes("BURGER") ||
+    upper.includes("PIZZA") ||
+    upper.includes("DELIVERY")
+  ) {
     searchName = "Alimentação";
-    defaultColor = "#10b981";
+    defaultColor = "#f59e0b";
     defaultIcon = "utensils";
-  } else if (upper.includes("TRANSPORTE") || upper.includes("UBER") || upper.includes("COMBUSTIVEL") || upper.includes("GASOLINA") || upper.includes("CARRO")) {
+  } else if (
+    upper.includes("TRANSPORTE") ||
+    upper.includes("UBER") ||
+    upper.includes("COMBUSTIVEL") ||
+    upper.includes("GASOLINA") ||
+    upper.includes("CARRO") ||
+    upper.includes("POSTO")
+  ) {
     searchName = "Transporte";
-    defaultColor = "#6366f1";
+    defaultColor = "#0ea5e9";
     defaultIcon = "car";
-  } else if (upper.includes("SAUDE") || upper.includes("FARMACIA") || upper.includes("MEDICO") || upper.includes("HOSPITAL")) {
+  } else if (
+    upper.includes("SAUDE") ||
+    upper.includes("FARMACIA") ||
+    upper.includes("MEDICO") ||
+    upper.includes("HOSPITAL") ||
+    upper.includes("DROGARIA")
+  ) {
     searchName = "Saúde";
     defaultColor = "#ef4444";
     defaultIcon = "heart-pulse";
-  } else if (upper.includes("LAZER") || upper.includes("STREAMING") || upper.includes("NETFLIX") || upper.includes("VIAGEM") || upper.includes("SHOW")) {
+  } else if (
+    upper.includes("LAZER") ||
+    upper.includes("STREAMING") ||
+    upper.includes("NETFLIX") ||
+    upper.includes("VIAGEM") ||
+    upper.includes("SHOW") ||
+    upper.includes("CINEMA")
+  ) {
     searchName = "Lazer";
     defaultColor = "#ec4899";
-    defaultIcon = "smile";
-  } else if (upper.includes("COMPRAS") || upper.includes("ROUPA") || upper.includes("AMAZON") || upper.includes("MERCADOLIVRE") || upper.includes("SHOPPING")) {
+    defaultIcon = "party-popper";
+  } else if (
+    upper.includes("COMPRAS") ||
+    upper.includes("ROUPA") ||
+    upper.includes("AMAZON") ||
+    upper.includes("MERCADOLIVRE") ||
+    upper.includes("SHOPPING") ||
+    upper.includes("SHEIN") ||
+    upper.includes("SHOPEE")
+  ) {
     searchName = "Compras";
-    defaultColor = "#8b5cf6";
+    defaultColor = "#f97316";
     defaultIcon = "shopping-bag";
-  } else if (upper.includes("CASA") || upper.includes("MORADIA") || upper.includes("ALUGUEL") || upper.includes("CONDOMINIO")) {
+  } else if (
+    upper.includes("CASA") ||
+    upper.includes("MORADIA") ||
+    upper.includes("ALUGUEL") ||
+    upper.includes("CONDOMINIO")
+  ) {
     searchName = "Moradia";
-    defaultColor = "#14b8a6";
+    defaultColor = "#6366f1";
     defaultIcon = "home";
-  } else if (upper.includes("EDUCACAO") || upper.includes("CURSO") || upper.includes("LIVRO") || upper.includes("FACULDADE")) {
+  } else if (
+    upper.includes("EDUCACAO") ||
+    upper.includes("CURSO") ||
+    upper.includes("LIVRO") ||
+    upper.includes("FACULDADE") ||
+    upper.includes("ESCOLA")
+  ) {
     searchName = "Educação";
-    defaultColor = "#3b82f6";
-    defaultIcon = "book-open";
+    defaultColor = "#8b5cf6";
+    defaultIcon = "graduation-cap";
+  } else if (upper.includes("DIZIMO") || upper.includes("OFERTA") || upper.includes("DOACAO")) {
+    searchName = "Dízimo";
+    defaultColor = "#059669";
+    defaultIcon = "hand-heart";
+  } else if (upper.includes("ASSINATURA") || upper.includes("MENSALIDADE") || upper.includes("SPOTIFY")) {
+    searchName = "Assinaturas";
+    defaultColor = "#14b8a6";
+    defaultIcon = "repeat";
+  } else if (upper.includes("MILHA") || upper.includes("SMILES") || upper.includes("LATAM") || upper.includes("AZUL") || upper.includes("LIVELO")) {
+    searchName = "Milhas";
+    defaultColor = "#eab308";
+    defaultIcon = "plane";
   }
 
   // Verifica novamente apos normalizacao de sinonimo
