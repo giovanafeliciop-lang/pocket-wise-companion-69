@@ -6,7 +6,7 @@ type Props = {
   label: string;
   value: number;
   icon: LucideIcon;
-  tone?: "primary" | "danger" | "neutral" | "warning";
+  tone?: "primary" | "danger" | "neutral" | "warning" | "indigo" | "purple";
   hint?: string;
 };
 
@@ -15,6 +15,8 @@ const tones: Record<string, string> = {
   danger: "text-destructive",
   neutral: "text-foreground",
   warning: "text-warning",
+  indigo: "text-indigo-600 dark:text-indigo-400",
+  purple: "text-purple-600 dark:text-purple-400",
 };
 
 export function StatCard({ label, value, icon: Icon, tone = "neutral", hint }: Props) {

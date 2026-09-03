@@ -6,6 +6,8 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
+  Clock3,
+  CreditCard,
   Download,
   ExternalLink,
   PiggyBank,
@@ -70,6 +72,16 @@ export function AnnualSummaryView({
   categories,
 }: Props) {
   // 1. Dados de cada mês do ano selecionado
+  const isManualCreditCard = (t: Transaction) =>
+    t.kind === "expense" &&
+    t.payment_method === "credito" &&
+    t.source !== "fatura" &&
+    t.source !== "invoice" &&
+    t.source !== "invoice_import";
+
+  const isDirectExpense = (t: Transaction) =>
+    t.kind === "expense" && !isManualCreditCard(t);
+
   const monthlyData = useMemo(() => {
     let runningBalance = 0;
     return MONTH_NAMES.map((name, index) => {
@@ -81,7 +93,11 @@ export function AnnualSummaryView({
 
       const expenses =
         (base?.expenses ?? 0) +
-        monthTxs.filter((t) => t.kind === "expense").reduce((s, t) => s + t.amount, 0);
+        monthTxs.filter(isDirectExpense).reduce((s, t) => s + t.amount, 0);
+
+      const creditCardExpenses = monthTxs
+        .filter(isManualCreditCard)
+        .reduce((s, t) => s + t.amount, 0);
 
       const income =
         (base?.income ?? 0) +
@@ -96,10 +112,11 @@ export function AnnualSummaryView({
         shortName: name.slice(0, 3),
         income,
         expenses,
+        creditCardExpenses,
         balance,
         runningBalance,
         txCount: monthTxs.length,
-        hasData: income > 0 || expenses > 0,
+        hasData: income > 0 || expenses > 0 || creditCardExpenses > 0,
       };
     });
   }, [history, transactions]);
@@ -108,6 +125,7 @@ export function AnnualSummaryView({
   const totals = useMemo(() => {
     const totalIncome = monthlyData.reduce((acc, m) => acc + m.income, 0);
     const totalExpenses = monthlyData.reduce((acc, m) => acc + m.expenses, 0);
+    const totalCreditCardExpenses = monthlyData.reduce((acc, m) => acc + m.creditCardExpenses, 0);
     const netBalance = totalIncome - totalExpenses;
     const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
 
@@ -118,6 +136,7 @@ export function AnnualSummaryView({
     return {
       totalIncome,
       totalExpenses,
+      totalCreditCardExpenses,
       netBalance,
       savingsRate,
       avgMonthlyExpense,
@@ -168,7 +187,7 @@ export function AnnualSummaryView({
         .filter((t) => t.kind === "income")
         .reduce((acc, t) => acc + t.amount, 0);
       const txExpenses = yearTxs
-        .filter((t) => t.kind === "expense")
+        .filter(isDirectExpense)
         .reduce((acc, t) => acc + t.amount, 0);
 
       const totalIncome = histIncome + txIncome;
@@ -253,13 +272,13 @@ export function AnnualSummaryView({
       </div>
 
       {/* Cartões de Indicadores Anuais */}
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <div className="surface-card relative overflow-hidden p-5 border-l-4 border-l-primary">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Total Entradas ({year})
             </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <TrendingUp className="h-4 w-4" />
             </div>
           </div>
@@ -276,7 +295,7 @@ export function AnnualSummaryView({
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Total Gastos ({year})
             </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10 text-rose-500">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-500/10 text-rose-500">
               <TrendingDown className="h-4 w-4" />
             </div>
           </div>
@@ -288,13 +307,30 @@ export function AnnualSummaryView({
           </p>
         </div>
 
+        <div className="surface-card relative overflow-hidden p-5 border-l-4 border-l-indigo-500">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Compras no Cartão ({year})
+            </span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-500">
+              <CreditCard className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-3 font-display text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+            {brl(totals.totalCreditCardExpenses)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Lançadas no cartão de crédito
+          </p>
+        </div>
+
         <div className="surface-card relative overflow-hidden p-5 border-l-4 border-l-emerald-500">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Saldo Líquido ({year})
             </span>
             <div
-              className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+              className={`flex h-8 w-8 items-center justify-center rounded-xl ${
                 totals.netBalance >= 0
                   ? "bg-emerald-500/10 text-emerald-500"
                   : "bg-rose-500/10 text-rose-500"
@@ -322,7 +358,7 @@ export function AnnualSummaryView({
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Taxa de Poupança
             </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
               <PiggyBank className="h-4 w-4" />
             </div>
           </div>

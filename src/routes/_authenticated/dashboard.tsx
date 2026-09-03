@@ -9,6 +9,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   Clock3,
+  CreditCard,
   Download,
   LogOut,
   Plus,
@@ -176,17 +177,40 @@ function Dashboard() {
     return dueTodayExpenses.reduce((sum, t) => sum + t.amount, 0);
   }, [dueTodayExpenses]);
 
+  const isManualCreditCardExpense = (t: Transaction) =>
+    t.kind === "expense" &&
+    t.payment_method === "credito" &&
+    t.source !== "fatura" &&
+    t.source !== "invoice" &&
+    t.source !== "invoice_import";
+
+  const isDirectExpense = (t: Transaction) =>
+    t.kind === "expense" && !isManualCreditCardExpense(t);
+
   const totals = useMemo(() => {
+    // Gastos pagos no cartão de crédito (entrarão nas faturas dos próximos meses)
+    const creditCardExpenses = transactions
+      .filter(isManualCreditCardExpense)
+      .reduce((s, t) => s + t.amount, 0);
+
+    // Gastos diretos do mês (Pix, Dinheiro, Débito, Boleto, Faturas pagas este mês)
     const expenses =
       (monthHistory?.expenses ?? 0) +
-      transactions.filter((t) => t.kind === "expense").reduce((s, t) => s + t.amount, 0);
+      transactions.filter(isDirectExpense).reduce((s, t) => s + t.amount, 0);
+
     const income =
       (monthHistory?.income ?? 0) +
       transactions.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
+
+    // Contas diretas em aberto que afetam o caixa do mês
     const pending = transactions
-      .filter((t) => t.kind === "expense" && !t.is_paid)
+      .filter((t) => isDirectExpense(t) && !t.is_paid)
       .reduce((s, t) => s + t.amount, 0);
-    return { expenses, income, pending, balance: income - expenses };
+
+    // Saldo = Entradas - Gastos Diretos do mês (não desconta compras manuais de cartão)
+    const balance = income - expenses;
+
+    return { expenses, creditCardExpenses, income, pending, balance };
   }, [transactions, monthHistory]);
 
 
@@ -468,7 +492,7 @@ function Dashboard() {
             </div>
           ) : null}
 
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <StatCard
               label="Entradas do mês"
               value={totals.income}
@@ -481,7 +505,14 @@ function Dashboard() {
               value={totals.expenses}
               icon={TrendingDown}
               tone="danger"
-              {...(monthHistory ? { hint: "Inclui histórico da planilha" } : {})}
+              hint="Débito, Pix, Dinheiro e Faturas pagas"
+            />
+            <StatCard
+              label="Gastos do mês pagos com cartão de crédito"
+              value={totals.creditCardExpenses}
+              icon={CreditCard}
+              tone="indigo"
+              hint="Entrarão nas faturas futuras"
             />
 
             <StatCard
@@ -496,7 +527,7 @@ function Dashboard() {
               value={totals.pending}
               icon={Clock3}
               tone="warning"
-              hint={`${transactions.filter((t) => t.kind === "expense" && !t.is_paid).length} despesas em aberto`}
+              hint={`${transactions.filter((t) => isDirectExpense(t) && !t.is_paid).length} contas em aberto`}
             />
           </section>
 
@@ -519,9 +550,16 @@ function Dashboard() {
             />
           </section>
 
-          <footer className="mt-8 flex items-center gap-2 text-xs text-muted-foreground">
-            <CircleDollarSign className="h-3.5 w-3.5" />
-            <span>{`Total lançado em ${MONTH_NAMES[month]}: ${brl(totals.income + totals.expenses)}`}</span>
+          <footer className="mt-8 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <CircleDollarSign className="h-3.5 w-3.5" />
+              <span>{`Total movimentado em caixa (${MONTH_NAMES[month]}): ${brl(totals.income + totals.expenses)}`}</span>
+            </div>
+            {totals.creditCardExpenses > 0 ? (
+              <span className="text-indigo-600 dark:text-indigo-400 font-medium">
+                {`+ ${brl(totals.creditCardExpenses)} em compras no cartão (faturas futuras)`}
+              </span>
+            ) : null}
           </footer>
         </div>
       ) : (

@@ -22,9 +22,18 @@ export function YearOverview({ year, history, transactions }: Props) {
     const live = transactions.filter(
       (t) => Number(t.occurred_on.slice(5, 7)) === index + 1,
     );
+    const isManualCreditCard = (t: Transaction) =>
+      t.kind === "expense" &&
+      t.payment_method === "credito" &&
+      t.source !== "fatura" &&
+      t.source !== "invoice" &&
+      t.source !== "invoice_import";
+
     const expenses =
       (base?.expenses ?? 0) +
-      live.filter((t) => t.kind === "expense").reduce((s, t) => s + t.amount, 0);
+      live
+        .filter((t) => t.kind === "expense" && !isManualCreditCard(t))
+        .reduce((s, t) => s + t.amount, 0);
     const income =
       (base?.income ?? 0) +
       live.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
