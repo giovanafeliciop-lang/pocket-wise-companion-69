@@ -391,8 +391,8 @@ export function TransactionList({
                                 className={cn(
                                   "flex items-center justify-between rounded-lg border px-2.5 py-1.5 text-xs transition-colors",
                                   item.is_paid
-                                    ? "border-primary/30 bg-primary/5"
-                                    : "border-border bg-secondary/20",
+                                    ? "border-border bg-secondary/30 text-muted-foreground"
+                                    : "border-amber-500/50 bg-amber-500/15 text-foreground hover:bg-amber-500/25",
                                 )}
                               >
                                 <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -404,7 +404,7 @@ export function TransactionList({
                                       "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-[10px] transition-colors",
                                       item.is_paid
                                         ? "border-primary bg-primary text-primary-foreground"
-                                        : "border-border text-muted-foreground hover:border-primary",
+                                        : "border-amber-500/80 bg-amber-500/20 text-amber-700 dark:text-amber-300 hover:bg-amber-500 hover:text-white",
                                     )}
                                   >
                                     {item.is_paid ? <Check className="h-3 w-3" /> : null}
@@ -493,6 +493,7 @@ export function TransactionList({
 
         {displayList.map((item) => {
           if (item.type === "invoice_summary") {
+            const isInvoiceOpen = !item.isAllPaid;
             return (
               <div
                 key={`invoice-summary-${item.cardName}`}
@@ -500,9 +501,7 @@ export function TransactionList({
                   "group flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors",
                   item.isAllPaid
                     ? "border-emerald-500/30 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08]"
-                    : item.isPartiallyPaid
-                      ? "border-amber-500/40 bg-amber-500/[0.04] hover:bg-amber-500/[0.08]"
-                      : "border-indigo-500/30 bg-indigo-500/[0.03] hover:bg-indigo-500/[0.07]",
+                    : "border-amber-500/60 bg-amber-500/15 text-foreground hover:bg-amber-500/25 shadow-xs shadow-amber-500/5",
                 )}
               >
                 <button
@@ -528,17 +527,15 @@ export function TransactionList({
                     "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors",
                     item.isAllPaid
                       ? "border-emerald-500 bg-emerald-600 text-white"
-                      : item.isPartiallyPaid
-                        ? "border-amber-500 bg-amber-500/20 text-amber-600 hover:bg-amber-500/30"
-                        : "border-indigo-500/50 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:border-indigo-500",
+                      : "border-amber-500/80 bg-amber-500/20 text-amber-700 dark:text-amber-300 hover:bg-amber-500 hover:text-white",
                   )}
                 >
                   {item.isAllPaid ? (
                     <Check className="h-4 w-4" />
                   ) : item.isPartiallyPaid ? (
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   ) : (
-                    <CreditCard className="h-4 w-4 text-indigo-500" />
+                    <CreditCard className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   )}
                 </button>
 
@@ -563,17 +560,23 @@ export function TransactionList({
                       Fatura de Cartão
                     </Badge>
                     {item.isPartiallyPaid ? (
-                      <span className="text-amber-600 dark:text-amber-400 font-medium">
-                        {`· ⚠️ Paga Parcialmente (${brl(item.paidTotal)} pago)`}
-                      </span>
+                      <Badge
+                        variant="outline"
+                        className="border-amber-500/80 bg-amber-500/20 text-amber-800 dark:text-amber-200 px-1.5 py-0 text-[10px] font-semibold"
+                      >
+                        {`⚠️ Paga Parcialmente (${brl(item.paidTotal)} pago)`}
+                      </Badge>
                     ) : item.isAllPaid ? (
                       <span className="text-emerald-600 dark:text-emerald-400 font-medium">
                         · Paga integralmente
                       </span>
                     ) : (
-                      <span className="text-warning font-medium">
-                        {`· ${item.openCount} compras em aberto`}
-                      </span>
+                      <Badge
+                        variant="outline"
+                        className="border-amber-500/80 bg-amber-500/20 text-amber-800 dark:text-amber-200 px-1.5 py-0 text-[10px] font-semibold"
+                      >
+                        {`${item.openCount} compras em aberto`}
+                      </Badge>
                     )}
                   </div>
                 </div>
@@ -602,11 +605,11 @@ export function TransactionList({
                   >
                     <span>Ver itens</span>
                   </Button>
-                  {!item.isAllPaid ? (
+                  {isInvoiceOpen ? (
                     <Button
                       variant={item.isPartiallyPaid ? "outline" : "default"}
                       size="sm"
-                      className="h-7 text-xs gap-1"
+                      className="h-7 text-xs gap-1 bg-amber-600 hover:bg-amber-700 text-white"
                       onClick={() =>
                         setPayDialogInvoice({ cardName: item.cardName, items: item.items })
                       }
@@ -624,10 +627,17 @@ export function TransactionList({
           const cat = categories.find((c) => c.id === t.category_id);
           const method = PAYMENT_METHODS.find((p) => p.value === t.payment_method)?.label;
           const income = t.kind === "income";
+          const isOpenExpense = !t.is_paid && t.kind === "expense";
+
           return (
             <div
               key={t.id}
-              className="group flex items-center gap-3 rounded-xl border border-border bg-secondary/30 px-3 py-2.5 transition-colors hover:bg-secondary/60"
+              className={cn(
+                "group flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors",
+                isOpenExpense
+                  ? "border-amber-500/60 bg-amber-500/15 text-foreground hover:bg-amber-500/25 shadow-xs shadow-amber-500/5"
+                  : "border-border bg-secondary/30 hover:bg-secondary/60",
+              )}
             >
               <button
                 type="button"
@@ -637,7 +647,9 @@ export function TransactionList({
                   "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors",
                   t.is_paid
                     ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border text-muted-foreground hover:border-primary",
+                    : isOpenExpense
+                      ? "border-amber-500/80 bg-amber-500/20 text-amber-700 dark:text-amber-300 hover:bg-amber-500 hover:text-white"
+                      : "border-border text-muted-foreground hover:border-primary",
                 )}
               >
                 {t.is_paid ? (
@@ -666,7 +678,16 @@ export function TransactionList({
                     {`· ${method ?? ""}${t.card_name ? ` (${t.card_name})` : ""}`}
                   </span>
                   {t.notes ? <span>{`· ${t.notes}`}</span> : null}
-                  {!t.is_paid ? <span className="text-warning">· em aberto</span> : null}
+                  {isOpenExpense ? (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500/80 bg-amber-500/20 text-amber-800 dark:text-amber-200 px-1.5 py-0 text-[10px] font-semibold"
+                    >
+                      Em aberto
+                    </Badge>
+                  ) : !t.is_paid ? (
+                    <span className="text-warning">· a receber</span>
+                  ) : null}
                 </div>
               </div>
 
