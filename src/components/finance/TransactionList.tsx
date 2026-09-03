@@ -105,18 +105,88 @@ export function TransactionList({
 
   const hasAnyPartialInvoice = cardInvoices.some((c) => c.isPartiallyPaid);
 
-  const filtered = transactions.filter((t) => {
-    if (search && !t.description.toLowerCase().includes(search.toLowerCase())) return false;
-    if (filter === "open") return !t.is_paid;
-    if (filter === "paid") return t.is_paid;
-    if (filter === "expense") return t.kind === "expense";
-    if (filter === "income") return t.kind === "income";
-    if (filter.startsWith("card:")) {
-      const card = filter.replace("card:", "");
-      return t.card_name === card && isInvoiceItem(t);
-    }
-    return true;
-  });
+  type ListItem =
+    | {
+        type: "transaction";
+        data: Transaction;
+      }
+    | {
+        type: "invoice_summary";
+        cardName: string;
+        items: Transaction[];
+        total: number;
+        paidTotal: number;
+        openTotal: number;
+        isAllPaid: boolean;
+        isPartiallyPaid: boolean;
+        openCount: number;
+        paidCount: number;
+        occurred_on: string;
+      };
+
+  const displayList = useMemo<ListItem[]>(() => {
+    // 1. Lançamentos regulares (exclui itens detalhados de faturas importadas)
+    const regularItems: ListItem[] = transactions
+      .filter((t) => !isInvoiceItem(t))
+      .map((t) => ({ type: "transaction", data: t }));
+
+    // 2. Um item resumo consolidado para cada fatura importada ativa
+    const invoiceSummaryItems: ListItem[] = cardInvoices.map((inv) => ({
+      type: "invoice_summary",
+      cardName: inv.cardName,
+      items: inv.items,
+      total: inv.total,
+      paidTotal: inv.paidTotal,
+      openTotal: inv.openTotal,
+      isAllPaid: inv.isAllPaid,
+      isPartiallyPaid: inv.isPartiallyPaid,
+      openCount: inv.openCount,
+      paidCount: inv.paidCount,
+      occurred_on: inv.items[0]?.occurred_on || new Date().toISOString().slice(0, 10),
+    }));
+
+    // Combina e ordena cronologicamente por data decrescente
+    const combined = [...regularItems, ...invoiceSummaryItems].sort((a, b) => {
+      const dateA = a.type === "transaction" ? a.data.occurred_on : a.occurred_on;
+      const dateB = b.type === "transaction" ? b.data.occurred_on : b.occurred_on;
+      return dateB.localeCompare(dateA);
+    });
+
+    // 3. Aplicação de busca e filtros
+    return combined.filter((item) => {
+      if (item.type === "transaction") {
+        const t = item.data;
+        if (search && !t.description.toLowerCase().includes(search.toLowerCase())) return false;
+        if (filter === "open") return !t.is_paid;
+        if (filter === "paid") return t.is_paid;
+        if (filter === "expense") return t.kind === "expense";
+        if (filter === "income") return t.kind === "income";
+        if (filter.startsWith("card:")) {
+          const card = filter.replace("card:", "");
+          return t.card_name === card;
+        }
+        return true;
+      } else {
+        const invoiceTitle = `Fatura Cartão de Crédito ${item.cardName}`;
+        if (
+          search &&
+          !invoiceTitle.toLowerCase().includes(search.toLowerCase()) &&
+          !item.cardName.toLowerCase().includes(search.toLowerCase())
+        ) {
+          return false;
+        }
+        if (filter === "open") return !item.isAllPaid;
+        if (filter === "paid") return item.isAllPaid;
+        if (filter === "income") return false;
+        if (filter === "expense") return true;
+        if (filter.startsWith("card:")) {
+          const card = filter.replace("card:", "");
+          return item.cardName === card;
+        }
+        return true;
+      }
+    });
+  }, [transactions, cardInvoices, search, filter]);
 
   return (
     <div className="surface-card p-5">
@@ -413,15 +483,144 @@ export function TransactionList({
         </div>
       </div>
 
-      {/* Lista de Transações Individuais */}
+      {/* Lista de Transações e Resumos de Faturas */}
       <div className="mt-4 space-y-2">
-        {filtered.length === 0 ? (
+        {displayList.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
             <p>Nenhum lançamento encontrado para este filtro.</p>
           </div>
         ) : null}
 
-        {filtered.map((t) => {
+        {displayList.map((item) => {
+          if (item.type === "invoice_summary") {
+            return (
+              <div
+                key={`invoice-summary-${item.cardName}`}
+                className={cn(
+                  "group flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors",
+                  item.isAllPaid
+                    ? "border-emerald-500/30 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08]"
+                    : item.isPartiallyPaid
+                      ? "border-amber-500/40 bg-amber-500/[0.04] hover:bg-amber-500/[0.08]"
+                      : "border-indigo-500/30 bg-indigo-500/[0.03] hover:bg-indigo-500/[0.07]",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (item.isAllPaid) {
+                      onToggleBatchPaid?.(
+                        item.items.map((i) => i.id),
+                        false,
+                      );
+                    } else {
+                      setPayDialogInvoice({ cardName: item.cardName, items: item.items });
+                    }
+                  }}
+                  title={
+                    item.isAllPaid
+                      ? "Fatura paga (clique para reabrir)"
+                      : item.isPartiallyPaid
+                        ? "Fatura parcialmente paga (clique para pagar ou ajustar)"
+                        : "Clique para pagar a fatura"
+                  }
+                  className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors",
+                    item.isAllPaid
+                      ? "border-emerald-500 bg-emerald-600 text-white"
+                      : item.isPartiallyPaid
+                        ? "border-amber-500 bg-amber-500/20 text-amber-600 hover:bg-amber-500/30"
+                        : "border-indigo-500/50 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:border-indigo-500",
+                  )}
+                >
+                  {item.isAllPaid ? (
+                    <Check className="h-4 w-4" />
+                  ) : item.isPartiallyPaid ? (
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  ) : (
+                    <CreditCard className="h-4 w-4 text-indigo-500" />
+                  )}
+                </button>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {`Fatura Cartão de Crédito ${item.cardName}`}
+                    </p>
+                    <Badge
+                      variant="secondary"
+                      className="text-[10px] px-1.5 py-0 h-4 shrink-0 font-medium bg-secondary text-muted-foreground"
+                    >
+                      {`${item.items.length} ${item.items.length === 1 ? "compra" : "compras"}`}
+                    </Badge>
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                    <span>{formatDate(item.occurred_on)}</span>
+                    <Badge
+                      variant="outline"
+                      className="border-indigo-500/40 text-indigo-600 dark:text-indigo-400 px-1.5 py-0 text-[10px]"
+                    >
+                      Fatura de Cartão
+                    </Badge>
+                    {item.isPartiallyPaid ? (
+                      <span className="text-amber-600 dark:text-amber-400 font-medium">
+                        {`· ⚠️ Paga Parcialmente (${brl(item.paidTotal)} pago)`}
+                      </span>
+                    ) : item.isAllPaid ? (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                        · Paga integralmente
+                      </span>
+                    ) : (
+                      <span className="text-warning font-medium">
+                        {`· ${item.openCount} compras em aberto`}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span className="numeric text-sm font-bold text-foreground">
+                    {`− ${brl(item.total)}`}
+                  </span>
+                  {item.isPartiallyPaid ? (
+                    <p className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">
+                      {`Falta: ${brl(item.openTotal)}`}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-primary hover:bg-primary/10 gap-1 px-2"
+                    onClick={() => {
+                      setExpandedCard(item.cardName);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    title="Ver compras e categorias detalhadas desta fatura no bloco superior"
+                  >
+                    <span>Ver itens</span>
+                  </Button>
+                  {!item.isAllPaid ? (
+                    <Button
+                      variant={item.isPartiallyPaid ? "outline" : "default"}
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() =>
+                        setPayDialogInvoice({ cardName: item.cardName, items: item.items })
+                      }
+                    >
+                      <Check className="h-3 w-3" />
+                      <span>Pagar</span>
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          }
+
+          const t = item.data;
           const cat = categories.find((c) => c.id === t.category_id);
           const method = PAYMENT_METHODS.find((p) => p.value === t.payment_method)?.label;
           const income = t.kind === "income";
