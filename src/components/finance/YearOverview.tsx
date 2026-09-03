@@ -8,7 +8,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { brl, MONTH_NAMES, type MonthlyHistory, type Transaction } from "@/lib/finance";
+import {
+  brl,
+  isDirectExpense,
+  MONTH_NAMES,
+  type MonthlyHistory,
+  type Transaction,
+} from "@/lib/finance";
 
 type Props = {
   year: number;
@@ -22,18 +28,10 @@ export function YearOverview({ year, history, transactions }: Props) {
     const live = transactions.filter(
       (t) => Number(t.occurred_on.slice(5, 7)) === index + 1,
     );
-    const isManualCreditCard = (t: Transaction) =>
-      t.kind === "expense" &&
-      t.payment_method === "credito" &&
-      t.source !== "fatura" &&
-      t.source !== "invoice" &&
-      t.source !== "invoice_import";
 
     const expenses =
       (base?.expenses ?? 0) +
-      live
-        .filter((t) => t.kind === "expense" && !isManualCreditCard(t))
-        .reduce((s, t) => s + t.amount, 0);
+      live.filter(isDirectExpense).reduce((s, t) => s + t.amount, 0);
     const income =
       (base?.income ?? 0) +
       live.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);

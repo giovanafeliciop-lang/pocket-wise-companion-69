@@ -43,6 +43,8 @@ import {
   AVAILABLE_YEARS,
   MONTH_NAMES,
   brl,
+  isCreditCardExpense,
+  isDirectExpense,
   type Category,
   type MonthlyHistory,
   type Transaction,
@@ -72,16 +74,6 @@ export function AnnualSummaryView({
   categories,
 }: Props) {
   // 1. Dados de cada mês do ano selecionado
-  const isManualCreditCard = (t: Transaction) =>
-    t.kind === "expense" &&
-    t.payment_method === "credito" &&
-    t.source !== "fatura" &&
-    t.source !== "invoice" &&
-    t.source !== "invoice_import";
-
-  const isDirectExpense = (t: Transaction) =>
-    t.kind === "expense" && !isManualCreditCard(t);
-
   const monthlyData = useMemo(() => {
     let runningBalance = 0;
     return MONTH_NAMES.map((name, index) => {
@@ -96,7 +88,7 @@ export function AnnualSummaryView({
         monthTxs.filter(isDirectExpense).reduce((s, t) => s + t.amount, 0);
 
       const creditCardExpenses = monthTxs
-        .filter(isManualCreditCard)
+        .filter(isCreditCardExpense)
         .reduce((s, t) => s + t.amount, 0);
 
       const income =

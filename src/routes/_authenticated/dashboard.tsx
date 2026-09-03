@@ -52,6 +52,8 @@ import {
   fetchMonthlyHistory,
   fetchTransactions,
   fetchYearTransactions,
+  isCreditCardExpense,
+  isDirectExpense,
   payInvoice,
   togglePaid,
   toggleBatchPaid,
@@ -179,23 +181,13 @@ function Dashboard() {
     return dueTodayExpenses.reduce((sum, t) => sum + t.amount, 0);
   }, [dueTodayExpenses]);
 
-  const isManualCreditCardExpense = (t: Transaction) =>
-    t.kind === "expense" &&
-    t.payment_method === "credito" &&
-    t.source !== "fatura" &&
-    t.source !== "invoice" &&
-    t.source !== "invoice_import";
-
-  const isDirectExpense = (t: Transaction) =>
-    t.kind === "expense" && !isManualCreditCardExpense(t);
-
   const totals = useMemo(() => {
-    // Gastos pagos no cartão de crédito (entrarão nas faturas dos próximos meses)
+    // Gastos pagos no cartão de crédito (compras no cartão + faturas pagas com cartão de crédito)
     const creditCardExpenses = transactions
-      .filter(isManualCreditCardExpense)
+      .filter(isCreditCardExpense)
       .reduce((s, t) => s + t.amount, 0);
 
-    // Gastos diretos do mês (Pix, Dinheiro, Débito, Boleto, Faturas pagas este mês)
+    // Gastos diretos do mês (Pix, Dinheiro, Débito, Boleto, Faturas pagas à vista/débito/pix)
     const expenses =
       (monthHistory?.expenses ?? 0) +
       transactions.filter(isDirectExpense).reduce((s, t) => s + t.amount, 0);
@@ -209,7 +201,7 @@ function Dashboard() {
       .filter((t) => isDirectExpense(t) && !t.is_paid)
       .reduce((s, t) => s + t.amount, 0);
 
-    // Saldo = Entradas - Gastos Diretos do mês (não desconta compras manuais de cartão)
+    // Saldo = Entradas - Gastos Diretos do mês (não desconta gastos no cartão de crédito)
     const balance = income - expenses;
 
     return { expenses, creditCardExpenses, income, pending, balance };

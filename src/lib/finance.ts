@@ -96,6 +96,48 @@ export const monthRange = (year: number, month: number) => {
   return { start, end };
 };
 
+export function isInvoiceItem(t: Transaction): boolean {
+  return (
+    t.kind === "expense" &&
+    t.payment_method === "credito" &&
+    Boolean(t.card_name) &&
+    (t.source === "fatura" || t.source === "invoice" || t.source === "invoice_import")
+  );
+}
+
+export function isInvoicePaidWithCreditCard(t: Transaction): boolean {
+  if (!t.is_paid || t.kind !== "expense") return false;
+  if (!isInvoiceItem(t)) return false;
+  const notesLower = (t.notes || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return (
+    notesLower.includes("via cartao") ||
+    notesLower.includes("pago com cartao") ||
+    notesLower.includes("pago no cartao")
+  );
+}
+
+export function isCreditCardExpense(t: Transaction): boolean {
+  if (t.kind !== "expense") return false;
+  // 1. Compra manual no cartão de crédito (não é fatura)
+  const isManual =
+    t.payment_method === "credito" &&
+    t.source !== "fatura" &&
+    t.source !== "invoice" &&
+    t.source !== "invoice_import";
+  if (isManual) return true;
+
+  // 2. Item de fatura que foi pago com outro cartão de crédito
+  return isInvoicePaidWithCreditCard(t);
+}
+
+export function isDirectExpense(t: Transaction): boolean {
+  if (t.kind !== "expense") return false;
+  return !isCreditCardExpense(t);
+}
+
 export function calculateRecurringDates(startDateStr: string, totalMonths: number): string[] {
   if (totalMonths <= 1 || !startDateStr) return [startDateStr];
   const parts = startDateStr.split("-");
@@ -488,8 +530,10 @@ export async function payInvoice(params: PayInvoiceParams) {
 
   const paidAtIso = `${paidAtDate}T12:00:00.000Z`;
   const paymentMethodLabel =
-    paymentMethod === "credito" && otherCardName
-      ? `Cartão ${otherCardName}`
+    paymentMethod === "credito"
+      ? otherCardName
+        ? `Cartão ${otherCardName}`
+        : "Cartão de Crédito"
       : paymentMethod === "pix"
         ? "Pix"
         : paymentMethod === "debito"
