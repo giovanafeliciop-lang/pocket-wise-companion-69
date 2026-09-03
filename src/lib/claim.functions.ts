@@ -98,3 +98,47 @@ export const claimLegacyData = createServerFn({ method: "POST" })
 
     return { claimed: true };
   });
+
+export const clearYearDataServerFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((d: { year: number }) => d)
+  .handler(async ({ data: { year }, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const userId = context.userId;
+
+    // Remove transações do ano especificado
+    if (userId) {
+      const { error: txErr } = await supabaseAdmin
+        .from("transactions")
+        .delete()
+        .or(`user_id.eq.${userId},user_id.is.null`)
+        .gte("occurred_on", `${year}-01-01`)
+        .lte("occurred_on", `${year}-12-31`);
+      if (txErr) console.error(`[ClearYear] Erro ao deletar transações de ${year}:`, txErr);
+    } else {
+      const { error: txErr } = await supabaseAdmin
+        .from("transactions")
+        .delete()
+        .gte("occurred_on", `${year}-01-01`)
+        .lte("occurred_on", `${year}-12-31`);
+      if (txErr) console.error(`[ClearYear] Erro ao deletar transações de ${year}:`, txErr);
+    }
+
+    // Remove histórico mensal da planilha daquele ano
+    if (userId) {
+      const { error: histErr } = await supabaseAdmin
+        .from("monthly_history")
+        .delete()
+        .or(`user_id.eq.${userId},user_id.is.null`)
+        .eq("year", year);
+      if (histErr) console.error(`[ClearYear] Erro ao deletar histórico de ${year}:`, histErr);
+    } else {
+      const { error: histErr } = await supabaseAdmin
+        .from("monthly_history")
+        .delete()
+        .eq("year", year);
+      if (histErr) console.error(`[ClearYear] Erro ao deletar histórico de ${year}:`, histErr);
+    }
+
+    return { success: true, year };
+  });

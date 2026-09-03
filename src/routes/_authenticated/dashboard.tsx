@@ -43,6 +43,7 @@ import {
   AVAILABLE_YEARS,
   MONTH_NAMES,
   brl,
+  clearYearData,
   createTransactions,
   deleteTransaction,
   fetchAllYearsHistory,
@@ -249,6 +250,15 @@ function Dashboard() {
     onSuccess: () => {
       invalidate();
       toast.success("Lançamento removido");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const clearYearMutation = useMutation({
+    mutationFn: (y: number) => clearYearData(y),
+    onSuccess: (_, y) => {
+      invalidate();
+      toast.success(`Todos os dados de ${y} foram zerados com sucesso!`);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -541,6 +551,9 @@ function Dashboard() {
             allHistory={allHistoryQuery.data ?? []}
             allTransactions={allTransactionsQuery.data ?? []}
             categories={categories}
+            onClearYear={async (y) => {
+              await clearYearMutation.mutateAsync(y);
+            }}
           />
         </div>
       )}

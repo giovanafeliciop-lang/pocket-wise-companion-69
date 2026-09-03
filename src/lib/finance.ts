@@ -367,3 +367,22 @@ export async function deleteTransaction(id: string) {
   const { error } = await supabase.from("transactions").delete().eq("id", id);
   if (error) throw error;
 }
+
+export async function clearYearData(year: number) {
+  try {
+    const { clearYearDataServerFn } = await import("./claim.functions");
+    await clearYearDataServerFn({ data: { year } });
+  } catch (err) {
+    console.warn("Fallback de exclusão direta:", err);
+    await supabase
+      .from("transactions")
+      .delete()
+      .gte("occurred_on", `${year}-01-01`)
+      .lte("occurred_on", `${year}-12-31`);
+
+    await supabase
+      .from("monthly_history")
+      .delete()
+      .eq("year", year);
+  }
+}
