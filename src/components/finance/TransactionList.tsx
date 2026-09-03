@@ -41,6 +41,51 @@ type Props = {
   onDelete: (t: Transaction) => void;
 };
 
+export function getInvoicePaymentDetails(items: Transaction[]) {
+  const paidItems = items.filter((i) => i.is_paid);
+  if (paidItems.length === 0) {
+    return {
+      method: null,
+      paidAt: null,
+      label: "Em aberto",
+    };
+  }
+
+  // Busca se algum item possui nota com a forma de pagamento registrada
+  const itemWithNote = paidItems.find(
+    (i) => i.notes && (i.notes.includes("via ") || i.notes.includes("Pago ")),
+  );
+
+  let method = "Pago";
+  let paidAt: string | null = null;
+
+  if (itemWithNote?.notes) {
+    const note = itemWithNote.notes;
+    const matchVia = note.match(/via\s+([A-Za-zÀ-ÿ0-9\s/]+?)(?:\s+em|\s*\(|$)/i);
+    if (matchVia && matchVia[1]) {
+      method = matchVia[1].trim();
+    }
+    const matchDate = note.match(/em\s+(\d{2}\/\d{2}\/\d{4})/i);
+    if (matchDate && matchDate[1]) {
+      paidAt = matchDate[1];
+    }
+  }
+
+  if (!paidAt && paidItems[0]?.paid_at) {
+    paidAt = formatDate(paidItems[0].paid_at.slice(0, 10));
+  }
+
+  const label = paidAt
+    ? `Paga via ${method} em ${paidAt}`
+    : `Paga via ${method}`;
+
+  return {
+    method,
+    paidAt,
+    label,
+  };
+}
+
 export function TransactionList({
   transactions,
   categories,
@@ -228,6 +273,7 @@ export function TransactionList({
                 paidPercent,
               }) => {
                 const isExpanded = expandedCard === cardName;
+                const paymentDetails = getInvoicePaymentDetails(items);
                 return (
                   <div
                     key={cardName}
@@ -235,7 +281,9 @@ export function TransactionList({
                       "flex flex-col justify-between rounded-xl border bg-card/90 p-3.5 shadow-xs transition-all",
                       isPartiallyPaid
                         ? "border-amber-500/50 bg-amber-500/[0.03] shadow-amber-500/5"
-                        : "border-border",
+                        : isAllPaid
+                          ? "border-emerald-500/40 bg-emerald-500/[0.02]"
+                          : "border-border",
                     )}
                   >
                     <div className="space-y-2">
@@ -246,16 +294,17 @@ export function TransactionList({
                               {cardName}
                             </span>
                             {isAllPaid ? (
-                              <Badge className="bg-emerald-600 text-white text-[10px] px-1.5 py-0 h-4.5 gap-1">
-                                <Check className="h-3 w-3" /> Fatura Paga
+                              <Badge className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 h-auto gap-1">
+                                <Check className="h-3 w-3 shrink-0" />
+                                <span>{paymentDetails.label ?? "Fatura Paga"}</span>
                               </Badge>
                             ) : isPartiallyPaid ? (
                               <Badge
                                 variant="outline"
-                                className="border-amber-500 bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0 h-4.5 gap-1 font-semibold"
+                                className="border-amber-500 bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[10px] px-2 py-0.5 h-auto gap-1 font-semibold"
                               >
-                                <AlertTriangle className="h-3 w-3 text-amber-500" />
-                                Paga Parcialmente
+                                <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+                                <span>{`Paga Parcialmente (via ${paymentDetails.method})`}</span>
                               </Badge>
                             ) : (
                               <Badge
@@ -269,6 +318,15 @@ export function TransactionList({
                           <p className="text-xs text-muted-foreground">
                             {`${items.length} ${items.length === 1 ? "compra lançada" : "compras lançadas"}`}
                           </p>
+                          {isAllPaid ? (
+                            <p className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
+                              {`✓ Pago via ${paymentDetails.method}${paymentDetails.paidAt ? ` em ${paymentDetails.paidAt}` : ""}`}
+                            </p>
+                          ) : isPartiallyPaid ? (
+                            <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium">
+                              {`⚠️ Pago ${brl(paidTotal)} via ${paymentDetails.method}${paymentDetails.paidAt ? ` em ${paymentDetails.paidAt}` : ""}`}
+                            </p>
+                          ) : null}
                         </div>
                         <span className="numeric text-sm font-bold text-foreground">
                           {brl(total)}
@@ -428,6 +486,13 @@ export function TransactionList({
                                       {cat.name}
                                     </Badge>
                                   ) : null}
+                                  {item.is_paid ? (
+                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal shrink-0">
+                                      {item.notes
+                                        ? `(${item.notes.replace("Fatura paga integralmente ", "").replace(" (Pagamento Parcial da Fatura)", "").replace(" (Pagamento Parcial)", "")})`
+                                        : "(Pago)"}
+                                    </span>
+                                  ) : null}
                                 </div>
                                 <span
                                   className={cn(
@@ -494,6 +559,7 @@ export function TransactionList({
         {displayList.map((item) => {
           if (item.type === "invoice_summary") {
             const isInvoiceOpen = !item.isAllPaid;
+            const paymentDetails = getInvoicePaymentDetails(item.items);
             return (
               <div
                 key={`invoice-summary-${item.cardName}`}
@@ -564,12 +630,15 @@ export function TransactionList({
                         variant="outline"
                         className="border-amber-500/80 bg-amber-500/20 text-amber-800 dark:text-amber-200 px-1.5 py-0 text-[10px] font-semibold"
                       >
-                        {`⚠️ Paga Parcialmente (${brl(item.paidTotal)} pago)`}
+                        {`⚠️ Paga Parcialmente (${brl(item.paidTotal)} pago via ${paymentDetails.method}${paymentDetails.paidAt ? ` em ${paymentDetails.paidAt}` : ""})`}
                       </Badge>
                     ) : item.isAllPaid ? (
-                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                        · Paga integralmente
-                      </span>
+                      <Badge
+                        variant="outline"
+                        className="border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-1.5 py-0 text-[10px] font-medium"
+                      >
+                        {`✓ ${paymentDetails.label}`}
+                      </Badge>
                     ) : (
                       <Badge
                         variant="outline"
