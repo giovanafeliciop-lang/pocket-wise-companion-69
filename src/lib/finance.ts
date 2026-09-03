@@ -126,18 +126,75 @@ export const DEFAULT_CATEGORIES: Category[] = [
   { id: "cat-outras-entradas", name: "Outras entradas", kind: "income", color: "#84cc16", icon: "plus-circle" },
 ];
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidUUID(id: string | null | undefined): boolean {
+  return typeof id === "string" && UUID_REGEX.test(id);
+}
+
+const SLUG_TO_NAME: Record<string, string> = {
+  "cat-moradia": "Moradia",
+  "cat-alimentacao": "Alimentação",
+  "cat-transporte": "Transporte",
+  "cat-saude": "Saúde",
+  "cat-educacao": "Educação",
+  "cat-lazer": "Lazer",
+  "cat-assinaturas": "Assinaturas",
+  "cat-compras": "Compras",
+  "cat-dizimo": "Dízimo",
+  "cat-telefone": "Telefone",
+  "cat-milhas": "Milhas",
+  "cat-contas": "Contas",
+  "cat-outros": "Outros",
+  "cat-salario": "Salário",
+  "cat-freelance": "Freelance",
+  "cat-outras-entradas": "Outras entradas",
+};
+
+async function resolveCategoryId(catId: string | null | undefined): Promise<string | null> {
+  if (!catId) return null;
+  if (isValidUUID(catId)) return catId;
+
+  const expectedName = SLUG_TO_NAME[catId] ?? catId;
+  try {
+    const { data } = await supabase
+      .from("categories")
+      .select("id, name");
+    
+    const match = (data ?? []).find(
+      (c) =>
+        c.name.toLowerCase().trim() === expectedName.toLowerCase().trim() ||
+        c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() ===
+          expectedName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
+    );
+
+    if (match && isValidUUID(match.id)) {
+      return match.id;
+    }
+
+    const { syncCategoriesServerFn } = await import("./claim.functions");
+    const fresh = await syncCategoriesServerFn();
+    const freshMatch = fresh.find(
+      (c) =>
+        c.name.toLowerCase().trim() === expectedName.toLowerCase().trim() ||
+        c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() ===
+          expectedName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
+    );
+
+    if (freshMatch && isValidUUID(freshMatch.id)) {
+      return freshMatch.id;
+    }
+  } catch (e) {
+    console.warn("Aviso ao resolver UUID da categoria:", e);
+  }
+
+  return null;
+}
+
 export async function fetchCategories(): Promise<Category[]> {
   try {
     const { data, error } = await supabase.from("categories").select("*").order("name");
-    if (error) {
-      console.warn("Aviso ao buscar categorias do Supabase, usando padrão:", error);
-      return DEFAULT_CATEGORIES;
-    }
-
     const dbCategories = (data ?? []) as Category[];
-    if (dbCategories.length === 0) {
-      return DEFAULT_CATEGORIES;
-    }
 
     // Identifica se alguma das categorias padrão (ex: Dízimo, Telefone, Milhas, Contas) ainda não está no banco
     const existingNames = new Set(
@@ -145,33 +202,30 @@ export async function fetchCategories(): Promise<Category[]> {
         c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
       )
     );
-    const missingDefaults = DEFAULT_CATEGORIES.filter(
+    const isMissingAny = DEFAULT_CATEGORIES.some(
       (c) =>
         !existingNames.has(
           c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
         )
     );
 
-    if (missingDefaults.length > 0) {
-      // Tenta inserir automaticamente no banco em segundo plano
-      void (async () => {
-        try {
-          const toInsert = missingDefaults.map(({ name, kind, color, icon }) => ({
-            name,
-            kind,
-            color,
-            icon,
-          }));
-          await supabase.from("categories").insert(toInsert);
-        } catch {
-          // Ignora caso de permissão de RLS
+    if (isMissingAny || dbCategories.length === 0) {
+      try {
+        const { syncCategoriesServerFn } = await import("./claim.functions");
+        const fresh = await syncCategoriesServerFn();
+        if (fresh && fresh.length > 0) {
+          return fresh as Category[];
         }
-      })();
-
-      return [...dbCategories, ...missingDefaults].sort((a, b) => a.name.localeCompare(b.name));
+      } catch (err) {
+        console.warn("Aviso ao sincronizar categorias padrão no servidor:", err);
+      }
     }
 
-    return dbCategories;
+    if (dbCategories.length > 0) {
+      return dbCategories;
+    }
+
+    return DEFAULT_CATEGORIES;
   } catch {
     return DEFAULT_CATEGORIES;
   }
@@ -231,18 +285,30 @@ export async function createTransactions(rows: TransactionInput[]) {
   const { data: auth } = await supabase.auth.getUser();
   const userId = auth.user?.id;
   if (!userId) throw new Error("Sessão expirada. Entre novamente.");
-  const payload = rows.map((r) => ({
-    ...r,
-    user_id: userId,
-    source: r.source ?? "manual",
-    paid_at: r.is_paid ? new Date().toISOString() : null,
-  }));
+
+  const payload = await Promise.all(
+    rows.map(async (r) => {
+      const validCatId = await resolveCategoryId(r.category_id);
+      return {
+        ...r,
+        category_id: validCatId,
+        user_id: userId,
+        source: r.source ?? "manual",
+        paid_at: r.is_paid ? new Date().toISOString() : null,
+      };
+    })
+  );
+
   const { error } = await supabase.from("transactions").insert(payload);
   if (error) throw error;
 }
 
 export async function updateTransaction(id: string, patch: Partial<TransactionInput>) {
-  const { error } = await supabase.from("transactions").update(patch).eq("id", id);
+  const finalPatch = { ...patch };
+  if (patch.category_id !== undefined) {
+    finalPatch.category_id = await resolveCategoryId(patch.category_id);
+  }
+  const { error } = await supabase.from("transactions").update(finalPatch).eq("id", id);
   if (error) throw error;
 }
 
