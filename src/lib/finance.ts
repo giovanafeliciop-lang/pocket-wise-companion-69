@@ -118,128 +118,110 @@ export function calculateRecurringDates(startDateStr: string, totalMonths: numbe
   return dates;
 }
 
-export const DEFAULT_CATEGORIES: Category[] = [
-  { id: "cat-moradia", name: "Moradia", kind: "expense", color: "#6366f1", icon: "home" },
-  { id: "cat-alimentacao", name: "Alimentação", kind: "expense", color: "#f59e0b", icon: "utensils" },
-  { id: "cat-transporte", name: "Transporte", kind: "expense", color: "#0ea5e9", icon: "car" },
-  { id: "cat-saude", name: "Saúde", kind: "expense", color: "#ef4444", icon: "heart-pulse" },
-  { id: "cat-educacao", name: "Educação", kind: "expense", color: "#8b5cf6", icon: "graduation-cap" },
-  { id: "cat-lazer", name: "Lazer", kind: "expense", color: "#ec4899", icon: "party-popper" },
-  { id: "cat-assinaturas", name: "Assinaturas", kind: "expense", color: "#14b8a6", icon: "repeat" },
-  { id: "cat-compras", name: "Compras", kind: "expense", color: "#f97316", icon: "shopping-bag" },
-  { id: "cat-dizimo", name: "Dízimo", kind: "expense", color: "#10b981", icon: "hand-heart" },
-  { id: "cat-telefone", name: "Telefone", kind: "expense", color: "#06b6d4", icon: "phone" },
-  { id: "cat-milhas", name: "Milhas", kind: "expense", color: "#eab308", icon: "plane" },
-  { id: "cat-contas", name: "Contas", kind: "expense", color: "#f43f5e", icon: "receipt" },
-  { id: "cat-outros", name: "Outros", kind: "expense", color: "#64748b", icon: "circle-dashed" },
-  { id: "cat-salario", name: "Salário", kind: "income", color: "#22c55e", icon: "wallet" },
-  { id: "cat-freelance", name: "Freelance", kind: "income", color: "#10b981", icon: "briefcase" },
-  { id: "cat-outras-entradas", name: "Outras entradas", kind: "income", color: "#84cc16", icon: "plus-circle" },
-];
-
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isValidUUID(id: string | null | undefined): boolean {
-  return typeof id === "string" && UUID_REGEX.test(id);
-}
-
-const SLUG_TO_NAME: Record<string, string> = {
-  "cat-moradia": "Moradia",
-  "cat-alimentacao": "Alimentação",
-  "cat-transporte": "Transporte",
-  "cat-saude": "Saúde",
-  "cat-educacao": "Educação",
-  "cat-lazer": "Lazer",
-  "cat-assinaturas": "Assinaturas",
-  "cat-compras": "Compras",
-  "cat-dizimo": "Dízimo",
-  "cat-telefone": "Telefone",
-  "cat-milhas": "Milhas",
-  "cat-contas": "Contas",
-  "cat-outros": "Outros",
-  "cat-salario": "Salário",
-  "cat-freelance": "Freelance",
-  "cat-outras-entradas": "Outras entradas",
-};
-
-async function resolveCategoryId(catId: string | null | undefined): Promise<string | null> {
-  if (!catId) return null;
-  if (isValidUUID(catId)) return catId;
-
-  const expectedName = SLUG_TO_NAME[catId] ?? catId;
-  try {
-    const { data } = await supabase
-      .from("categories")
-      .select("id, name");
-    
-    const match = (data ?? []).find(
-      (c) =>
-        c.name.toLowerCase().trim() === expectedName.toLowerCase().trim() ||
-        c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() ===
-          expectedName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
-    );
-
-    if (match && isValidUUID(match.id)) {
-      return match.id;
-    }
-
-    const { syncCategoriesServerFn } = await import("./claim.functions");
-    const fresh = await syncCategoriesServerFn();
-    const freshMatch = fresh.find(
-      (c) =>
-        c.name.toLowerCase().trim() === expectedName.toLowerCase().trim() ||
-        c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() ===
-          expectedName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
-    );
-
-    if (freshMatch && isValidUUID(freshMatch.id)) {
-      return freshMatch.id;
-    }
-  } catch (e) {
-    console.warn("Aviso ao resolver UUID da categoria:", e);
-  }
-
-  return null;
-}
-
 export async function fetchCategories(): Promise<Category[]> {
-  try {
-    const { data, error } = await supabase.from("categories").select("*").order("name");
-    const dbCategories = (data ?? []) as Category[];
+  const { data, error } = await supabase.from("categories").select("*").order("name");
+  if (error) throw error;
+  return (data ?? []) as Category[];
+}
 
-    // Identifica se alguma das categorias padrão (ex: Dízimo, Telefone, Milhas, Contas) ainda não está no banco
-    const existingNames = new Set(
-      dbCategories.map((c) =>
-        c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
-      )
-    );
-    const isMissingAny = DEFAULT_CATEGORIES.some(
-      (c) =>
-        !existingNames.has(
-          c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
-        )
-    );
+export async function resolveCategoryId(idOrName: string | null | undefined): Promise<string | null> {
+  if (!idOrName) return null;
+  const trimmed = idOrName.trim();
+  if (!trimmed) return null;
 
-    if (isMissingAny || dbCategories.length === 0) {
-      try {
-        const { syncCategoriesServerFn } = await import("./claim.functions");
-        const fresh = await syncCategoriesServerFn();
-        if (fresh && fresh.length > 0) {
-          return fresh as Category[];
-        }
-      } catch (err) {
-        console.warn("Aviso ao sincronizar categorias padrão no servidor:", err);
-      }
-    }
+  // 1. Tenta achar categoria existente por ID exato
+  const { data: byId } = await supabase
+    .from("categories")
+    .select("id")
+    .eq("id", trimmed)
+    .maybeSingle();
 
-    if (dbCategories.length > 0) {
-      return dbCategories;
-    }
+  if (byId?.id) return byId.id;
 
-    return DEFAULT_CATEGORIES;
-  } catch {
-    return DEFAULT_CATEGORIES;
+  // 2. Tenta achar categoria existente por Nome exato (case-insensitive)
+  const { data: byName } = await supabase
+    .from("categories")
+    .select("id")
+    .ilike("name", trimmed)
+    .maybeSingle();
+
+  if (byName?.id) return byName.id;
+
+  // 3. Mapeamento de sinonimos comuns de importacao
+  const upper = trimmed.toUpperCase();
+  let searchName = trimmed;
+  let defaultColor = "#64748b";
+  let defaultIcon = "tag";
+
+  if (upper.includes("TELEFONE") || upper.includes("CELULAR") || upper.includes("INTERNET") || upper.includes("VIVO") || upper.includes("CLARO") || upper.includes("TIM")) {
+    searchName = "Telefone / Internet";
+    defaultColor = "#0284c7";
+    defaultIcon = "phone";
+  } else if (upper.includes("CONTAS") || upper.includes("LUZ") || upper.includes("AGUA") || upper.includes("ENERGIA") || upper.includes("GAS")) {
+    searchName = "Contas Básicas";
+    defaultColor = "#f59e0b";
+    defaultIcon = "zap";
+  } else if (upper.includes("ALIMENTA") || upper.includes("MERCADO") || upper.includes("RESTAURANTE") || upper.includes("IFOOD") || upper.includes("PADARIA")) {
+    searchName = "Alimentação";
+    defaultColor = "#10b981";
+    defaultIcon = "utensils";
+  } else if (upper.includes("TRANSPORTE") || upper.includes("UBER") || upper.includes("COMBUSTIVEL") || upper.includes("GASOLINA") || upper.includes("CARRO")) {
+    searchName = "Transporte";
+    defaultColor = "#6366f1";
+    defaultIcon = "car";
+  } else if (upper.includes("SAUDE") || upper.includes("FARMACIA") || upper.includes("MEDICO") || upper.includes("HOSPITAL")) {
+    searchName = "Saúde";
+    defaultColor = "#ef4444";
+    defaultIcon = "heart-pulse";
+  } else if (upper.includes("LAZER") || upper.includes("STREAMING") || upper.includes("NETFLIX") || upper.includes("VIAGEM") || upper.includes("SHOW")) {
+    searchName = "Lazer";
+    defaultColor = "#ec4899";
+    defaultIcon = "smile";
+  } else if (upper.includes("COMPRAS") || upper.includes("ROUPA") || upper.includes("AMAZON") || upper.includes("MERCADOLIVRE") || upper.includes("SHOPPING")) {
+    searchName = "Compras";
+    defaultColor = "#8b5cf6";
+    defaultIcon = "shopping-bag";
+  } else if (upper.includes("CASA") || upper.includes("MORADIA") || upper.includes("ALUGUEL") || upper.includes("CONDOMINIO")) {
+    searchName = "Moradia";
+    defaultColor = "#14b8a6";
+    defaultIcon = "home";
+  } else if (upper.includes("EDUCACAO") || upper.includes("CURSO") || upper.includes("LIVRO") || upper.includes("FACULDADE")) {
+    searchName = "Educação";
+    defaultColor = "#3b82f6";
+    defaultIcon = "book-open";
   }
+
+  // Verifica novamente apos normalizacao de sinonimo
+  const { data: bySynonym } = await supabase
+    .from("categories")
+    .select("id")
+    .ilike("name", searchName)
+    .maybeSingle();
+
+  if (bySynonym?.id) return bySynonym.id;
+
+  // 4. Se nao existe, cria dinamicamente a categoria
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+
+  const { data: newCat, error } = await supabase
+    .from("categories")
+    .insert({
+      name: searchName,
+      kind: "expense",
+      color: defaultColor,
+      icon: defaultIcon,
+      ...(userId ? { user_id: userId } : {}),
+    })
+    .select("id")
+    .maybeSingle();
+
+  if (error || !newCat?.id) {
+    console.warn("Nao foi possivel criar categoria automatica:", error?.message);
+    return null;
+  }
+
+  return newCat.id;
 }
 
 export async function fetchTransactions(year: number, month: number): Promise<Transaction[]> {
@@ -366,6 +348,117 @@ export async function toggleBatchPaid(ids: string[], isPaid: boolean) {
 export async function deleteTransaction(id: string) {
   const { error } = await supabase.from("transactions").delete().eq("id", id);
   if (error) throw error;
+}
+
+export type PayInvoiceParams = {
+  items: Transaction[];
+  isPartial: boolean;
+  paidAmount: number;
+  paymentMethod: string;
+  otherCardName?: string | null;
+  paidAtDate: string; // YYYY-MM-DD
+};
+
+export async function payInvoice(params: PayInvoiceParams) {
+  const { items, isPartial, paidAmount, paymentMethod, otherCardName, paidAtDate } = params;
+  if (items.length === 0) return;
+
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+
+  const paidAtIso = `${paidAtDate}T12:00:00.000Z`;
+  const paymentMethodLabel =
+    paymentMethod === "credito" && otherCardName
+      ? `Cartão ${otherCardName}`
+      : paymentMethod === "pix"
+        ? "Pix"
+        : paymentMethod === "debito"
+          ? "Cartão de Débito"
+          : paymentMethod === "boleto"
+            ? "Boleto Bancário"
+            : paymentMethod === "dinheiro"
+              ? "Dinheiro / Conta"
+              : paymentMethod;
+
+  if (!isPartial) {
+    // Pagamento integral
+    const itemIds = items.map((i) => i.id);
+    const noteText = `Fatura paga integralmente via ${paymentMethodLabel} em ${formatDate(paidAtDate)}`;
+    const { error } = await supabase
+      .from("transactions")
+      .update({
+        is_paid: true,
+        paid_at: paidAtIso,
+        notes: noteText,
+      })
+      .in("id", itemIds);
+    if (error) throw error;
+    return;
+  }
+
+  // Pagamento Parcial
+  const total = items.reduce((s, i) => s + i.amount, 0);
+  const actualPaid = Math.max(0, Math.min(paidAmount, total));
+  let remainingToPay = actualPaid;
+
+  for (const item of items) {
+    if (remainingToPay <= 0) {
+      // Itens não cobertos continuam em aberto com aviso de juros
+      await supabase
+        .from("transactions")
+        .update({
+          is_paid: false,
+          paid_at: null,
+          notes: "Saldo restante de fatura parcial — gerará juros na próxima fatura",
+        })
+        .eq("id", item.id);
+    } else if (item.amount <= remainingToPay + 0.001) {
+      // Item totalmente pago pelo valor parcial
+      await supabase
+        .from("transactions")
+        .update({
+          is_paid: true,
+          paid_at: paidAtIso,
+          notes: `Pago via ${paymentMethodLabel} em ${formatDate(paidAtDate)} (Pagamento Parcial da Fatura)`,
+        })
+        .eq("id", item.id);
+      remainingToPay -= item.amount;
+    } else {
+      // Item divide entre o que foi pago e o que ficou pendente
+      const paidPortion = Number(remainingToPay.toFixed(2));
+      const unpaidPortion = Number((item.amount - paidPortion).toFixed(2));
+
+      // Atualiza o item atual como a parte paga
+      await supabase
+        .from("transactions")
+        .update({
+          amount: paidPortion,
+          is_paid: true,
+          paid_at: paidAtIso,
+          notes: `Pago ${brl(paidPortion)} via ${paymentMethodLabel} em ${formatDate(paidAtDate)} (Pagamento Parcial)`,
+        })
+        .eq("id", item.id);
+
+      // Cria a parte restante como pendente
+      if (unpaidPortion > 0 && userId) {
+        await supabase.from("transactions").insert({
+          user_id: userId,
+          kind: "expense",
+          description: `${item.description} (Saldo restante)`,
+          amount: unpaidPortion,
+          occurred_on: item.occurred_on,
+          category_id: item.category_id,
+          payment_method: "credito",
+          card_name: item.card_name,
+          source: item.source ?? "fatura",
+          is_paid: false,
+          notes: "Saldo devedor restante de fatura parcial — gerará juros e encargos na próxima fatura",
+        });
+      }
+
+      remainingToPay = 0;
+    }
+  }
 }
 
 export async function clearYearData(year: number) {

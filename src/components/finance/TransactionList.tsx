@@ -26,14 +26,17 @@ import {
   brl,
   formatDate,
   type Category,
+  type PayInvoiceParams,
   type Transaction,
 } from "@/lib/finance";
+import { PayInvoiceDialog } from "@/components/finance/PayInvoiceDialog";
 
 type Props = {
   transactions: Transaction[];
   categories: Category[];
   onTogglePaid: (t: Transaction) => void;
   onToggleBatchPaid?: (ids: string[], isPaid: boolean) => void;
+  onPayInvoice?: (params: PayInvoiceParams) => Promise<void>;
   onEdit: (t: Transaction) => void;
   onDelete: (t: Transaction) => void;
 };
@@ -43,12 +46,17 @@ export function TransactionList({
   categories,
   onTogglePaid,
   onToggleBatchPaid,
+  onPayInvoice,
   onEdit,
   onDelete,
 }: Props) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const [payDialogInvoice, setPayDialogInvoice] = useState<{
+    cardName: string;
+    items: Transaction[];
+  } | null>(null);
 
   const isInvoiceItem = (t: Transaction) =>
     t.kind === "expense" &&
@@ -114,11 +122,11 @@ export function TransactionList({
     <div className="surface-card p-5">
       {/* Alerta Global de Fatura Parcial */}
       {hasAnyPartialInvoice ? (
-        <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
-          <AlertTriangle className="h-4 w-3.5 shrink-0 text-amber-500" />
+        <div className="mb-4 flex items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
           <p>
-            <strong>Atenção:</strong> Você possui fatura(s) de cartão com pagamento parcial este
-            mês. Lembre-se de quitar o saldo restante até o vencimento.
+            <strong>⚠️ Atenção:</strong> Você possui fatura(s) de cartão com pagamento parcial este
+            mês. O saldo devedor não pago permanecerá em aberto e <strong>gerará juros e encargos na fatura do próximo mês</strong>.
           </p>
         </div>
       ) : null}
@@ -197,15 +205,15 @@ export function TransactionList({
                         </span>
                       </div>
 
-                      {/* Barra de progresso e detalhe para faturas parciais */}
+                      {/* Barra de progresso e detalhe para faturas parciais com aviso de juros */}
                       {isPartiallyPaid ? (
-                        <div className="space-y-1.5 rounded-lg bg-amber-500/10 p-2 border border-amber-500/20 text-xs">
+                        <div className="space-y-1.5 rounded-lg bg-amber-500/10 p-2.5 border border-amber-500/30 text-xs">
                           <div className="flex items-center justify-between text-[11px] font-medium text-amber-800 dark:text-amber-200">
                             <span className="flex items-center gap-1">
-                              <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" />
+                              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                               {`Pago: ${brl(paidTotal)} (${paidCount} de ${items.length})`}
                             </span>
-                            <span>{`Falta: ${brl(openTotal)}`}</span>
+                            <span className="font-bold text-rose-600 dark:text-rose-400">{`Falta pagar: ${brl(openTotal)}`}</span>
                           </div>
                           <div className="h-1.5 w-full overflow-hidden rounded-full bg-amber-500/20">
                             <div
@@ -213,8 +221,8 @@ export function TransactionList({
                               style={{ width: `${paidPercent}%` }}
                             />
                           </div>
-                          <p className="text-[10px] text-amber-700 dark:text-amber-300 opacity-90">
-                            {`⚠️ Alerta: Restam ${brl(openTotal)} pendentes nesta fatura.`}
+                          <p className="text-[10px] text-amber-700 dark:text-amber-300 leading-tight font-medium">
+                            {`⚠️ Alerta: Restam ${brl(openTotal)} em aberto que gerarão juros rotativos e encargos na fatura do próximo mês.`}
                           </p>
                         </div>
                       ) : null}
@@ -236,7 +244,7 @@ export function TransactionList({
                         ) : (
                           <>
                             <ChevronDown className="h-3.5 w-3.5" />
-                            {`Ver / Pagar itens (${items.length})`}
+                            {`Ver itens (${items.length})`}
                           </>
                         )}
                       </Button>
@@ -258,33 +266,41 @@ export function TransactionList({
                             Reabrir fatura
                           </Button>
                         ) : isPartiallyPaid ? (
-                          <Button
-                            type="button"
-                            variant="default"
-                            size="sm"
-                            className="h-7 text-xs gap-1 bg-amber-600 hover:bg-amber-700 text-white"
-                            onClick={() => {
-                              const openIds = items.filter((i) => !i.is_paid).map((i) => i.id);
-                              onToggleBatchPaid?.(openIds, true);
-                            }}
-                          >
-                            <Check className="h-3 w-3" />
-                            {`Pagar restante (${brl(openTotal)})`}
-                          </Button>
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() =>
+                                onToggleBatchPaid?.(
+                                  items.map((i) => i.id),
+                                  false,
+                                )
+                              }
+                            >
+                              Reabrir
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="default"
+                              size="sm"
+                              className="h-7 text-xs gap-1 bg-amber-600 hover:bg-amber-700 text-white"
+                              onClick={() => setPayDialogInvoice({ cardName, items })}
+                            >
+                              <Check className="h-3 w-3" />
+                              {`Pagar / Ajustar (${brl(openTotal)})`}
+                            </Button>
+                          </>
                         ) : (
                           <Button
                             type="button"
                             variant="default"
                             size="sm"
                             className="h-7 text-xs gap-1"
-                            onClick={() =>
-                              onToggleBatchPaid?.(
-                                items.map((i) => i.id),
-                                true,
-                              )
-                            }
+                            onClick={() => setPayDialogInvoice({ cardName, items })}
                           >
-                            <Check className="h-3.5 w-3.5" /> Pagar fatura inteira
+                            <Check className="h-3.5 w-3.5" /> Pagar fatura
                           </Button>
                         )}
                       </div>
@@ -303,7 +319,7 @@ export function TransactionList({
                               <div
                                 key={item.id}
                                 className={cn(
-                                   "flex items-center justify-between rounded-lg border px-2.5 py-1.5 text-xs transition-colors",
+                                  "flex items-center justify-between rounded-lg border px-2.5 py-1.5 text-xs transition-colors",
                                   item.is_paid
                                     ? "border-primary/30 bg-primary/5"
                                     : "border-border bg-secondary/20",
@@ -318,12 +334,21 @@ export function TransactionList({
                                       "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-[10px] transition-colors",
                                       item.is_paid
                                         ? "border-primary bg-primary text-primary-foreground"
-                                        : "border-muted-foreground/40 hover:border-primary",
+                                        : "border-border text-muted-foreground hover:border-primary",
                                     )}
                                   >
-                                    {item.is_paid ? <Check className="h-3.5 w-3.5" /> : null}
+                                    {item.is_paid ? <Check className="h-3 w-3" /> : null}
                                   </button>
-                                  <span className="truncate font-medium">{item.description}</span>
+                                  <span
+                                    className={cn(
+                                      "truncate",
+                                      item.is_paid
+                                        ? "line-through text-muted-foreground"
+                                        : "font-medium text-foreground",
+                                    )}
+                                  >
+                                    {item.description}
+                                  </span>
                                   {cat ? (
                                     <Badge
                                       variant="outline"
@@ -334,7 +359,14 @@ export function TransactionList({
                                     </Badge>
                                   ) : null}
                                 </div>
-                                <span className="numeric font-semibold ml-2 text-foreground">
+                                <span
+                                  className={cn(
+                                    "numeric font-semibold ml-2 shrink-0",
+                                    item.is_paid
+                                      ? "text-muted-foreground line-through"
+                                      : "text-foreground",
+                                  )}
+                                >
                                   {brl(item.amount)}
                                 </span>
                               </div>
@@ -351,28 +383,29 @@ export function TransactionList({
         </div>
       ) : null}
 
+      {/* Controles de Busca e Filtro */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold">Lançamentos</h2>
-        <div className="flex flex-1 justify-end gap-2">
+        <h2 className="font-display text-lg font-semibold">Lançamentos do mês</h2>
+        <div className="flex flex-wrap items-center gap-2">
           <Input
-            className="max-w-52"
-            placeholder="Buscar..."
+            placeholder="Buscar lançamento..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            className="h-9 w-48 text-xs"
           />
           <Select value={filter} onValueChange={setFilter}>
-            <SelectTrigger className="w-44">
+            <SelectTrigger className="h-9 w-36 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="open">Em aberto</SelectItem>
               <SelectItem value="paid">Pagos</SelectItem>
-              <SelectItem value="expense">Só despesas</SelectItem>
-              <SelectItem value="income">Só entradas</SelectItem>
-              {cardInvoices.map(({ cardName }) => (
-                <SelectItem key={cardName} value={`card:${cardName}`}>
-                  💳 Fatura: {cardName}
+              <SelectItem value="expense">Despesas</SelectItem>
+              <SelectItem value="income">Entradas</SelectItem>
+              {cardInvoices.map((c) => (
+                <SelectItem key={c.cardName} value={`card:${c.cardName}`}>
+                  {`Fatura ${c.cardName}`}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -380,16 +413,17 @@ export function TransactionList({
         </div>
       </div>
 
+      {/* Lista de Transações Individuais */}
       <div className="mt-4 space-y-2">
         {filtered.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            Nenhum lançamento por aqui.
-          </p>
+          <div className="rounded-xl border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
+            <p>Nenhum lançamento encontrado para este filtro.</p>
+          </div>
         ) : null}
 
         {filtered.map((t) => {
           const cat = categories.find((c) => c.id === t.category_id);
-          const method = PAYMENT_METHODS.find((m) => m.value === t.payment_method)?.label;
+          const method = PAYMENT_METHODS.find((p) => p.value === t.payment_method)?.label;
           const income = t.kind === "income";
           return (
             <div
@@ -458,6 +492,20 @@ export function TransactionList({
           );
         })}
       </div>
+
+      <PayInvoiceDialog
+        open={Boolean(payDialogInvoice)}
+        onOpenChange={(open) => {
+          if (!open) setPayDialogInvoice(null);
+        }}
+        cardName={payDialogInvoice?.cardName ?? ""}
+        items={payDialogInvoice?.items ?? []}
+        onConfirm={async (params) => {
+          if (onPayInvoice) {
+            await onPayInvoice(params);
+          }
+        }}
+      />
     </div>
   );
 }

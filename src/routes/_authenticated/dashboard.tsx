@@ -52,10 +52,12 @@ import {
   fetchMonthlyHistory,
   fetchTransactions,
   fetchYearTransactions,
+  payInvoice,
   togglePaid,
   toggleBatchPaid,
   updateTransaction,
   type Kind,
+  type PayInvoiceParams,
   type Transaction,
   type TransactionInput,
 } from "@/lib/finance";
@@ -264,6 +266,23 @@ function Dashboard() {
       toast.success(
         variables.isPaid ? "Fatura marcada como paga!" : "Fatura reaberta com sucesso!",
       );
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const payInvoiceMutation = useMutation({
+    mutationFn: (params: PayInvoiceParams) => payInvoice(params),
+    onSuccess: (_, variables) => {
+      invalidate();
+      if (variables.isPartial) {
+        toast.warning(
+          `Pagamento parcial de ${brl(variables.paidAmount)} registrado! O saldo devedor restante gerará juros na próxima fatura.`,
+        );
+      } else {
+        toast.success(
+          `Fatura de ${variables.items[0]?.card_name ?? "cartão"} marcada como paga!`,
+        );
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -542,6 +561,9 @@ function Dashboard() {
               categories={categories}
               onTogglePaid={(t) => paidMutation.mutate(t)}
               onToggleBatchPaid={(ids, isPaid) => batchPaidMutation.mutate({ ids, isPaid })}
+              onPayInvoice={async (params) => {
+                await payInvoiceMutation.mutateAsync(params);
+              }}
               onEdit={(t) => {
                 setEditing(t);
                 setDialogOpen(true);
