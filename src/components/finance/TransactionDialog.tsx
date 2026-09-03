@@ -136,6 +136,7 @@ export function TransactionDialog({
           payment_method: method,
           card_name: resolvedCard,
           is_paid: index === 0 ? isPaid : false,
+          source: "manual",
         }));
         await onSubmit(rows);
       } else {
@@ -148,6 +149,8 @@ export function TransactionDialog({
           payment_method: method,
           card_name: resolvedCard,
           is_paid: isPaid,
+          source: editing ? (editing.source || "manual") : "manual",
+          notes: editing?.notes ?? null,
         });
       }
       onOpenChange(false);

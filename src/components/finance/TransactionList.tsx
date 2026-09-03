@@ -50,10 +50,16 @@ export function TransactionList({
   const [filter, setFilter] = useState("all");
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
 
+  const isInvoiceItem = (t: Transaction) =>
+    t.kind === "expense" &&
+    t.payment_method === "credito" &&
+    Boolean(t.card_name) &&
+    (t.source === "fatura" || t.source === "invoice" || t.source === "invoice_import");
+
   const cardInvoices = useMemo(() => {
     const map = new Map<string, Transaction[]>();
     for (const t of transactions) {
-      if (t.kind === "expense" && t.payment_method === "credito" && t.card_name) {
+      if (isInvoiceItem(t) && t.card_name) {
         const list = map.get(t.card_name) ?? [];
         list.push(t);
         map.set(t.card_name, list);
@@ -99,7 +105,7 @@ export function TransactionList({
     if (filter === "income") return t.kind === "income";
     if (filter.startsWith("card:")) {
       const card = filter.replace("card:", "");
-      return t.card_name === card;
+      return t.card_name === card && isInvoiceItem(t);
     }
     return true;
   });
