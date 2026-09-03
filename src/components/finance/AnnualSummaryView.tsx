@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -9,7 +9,6 @@ import {
   Download,
   ExternalLink,
   PiggyBank,
-  Trash2,
   TrendingDown,
   TrendingUp,
   Wallet,
@@ -30,16 +29,6 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -62,7 +51,6 @@ type Props = {
   onSelectYear: (y: number) => void;
   onSelectMonth: (m: number) => void;
   onNavigateToMonth: (y: number, m: number) => void;
-  onClearYear?: (year: number) => Promise<void>;
   history: MonthlyHistory[];
   transactions: Transaction[];
   allHistory?: MonthlyHistory[];
@@ -75,7 +63,6 @@ export function AnnualSummaryView({
   onSelectYear,
   onSelectMonth,
   onNavigateToMonth,
-  onClearYear,
   history,
   transactions,
   allHistory = [],
@@ -198,22 +185,6 @@ export function AnnualSummaryView({
     }).filter((y) => y.hasData || y.year === year || y.year === 2023 || y.year === 2024 || y.year === 2025 || y.year === 2026);
   }, [allHistory, allTransactions, year]);
 
-  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
-  const [clearing, setClearing] = useState(false);
-
-  const handleClearYear = async () => {
-    if (!onClearYear) return;
-    setClearing(true);
-    try {
-      await onClearYear(year);
-      setConfirmClearOpen(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao zerar dados");
-    } finally {
-      setClearing(false);
-    }
-  };
-
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Controles de Cabeçalho do Ano */}
@@ -278,53 +249,8 @@ export function AnnualSummaryView({
             <Download className="h-4 w-4" />
             Exportar Excel
           </Button>
-
-          {onClearYear ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 gap-1.5 text-rose-600 hover:bg-rose-500/10 hover:text-rose-700 border-rose-500/30"
-              onClick={() => setConfirmClearOpen(true)}
-            >
-              <Trash2 className="h-4 w-4" />
-              {`Zerar dados de ${year}`}
-            </Button>
-          ) : null}
         </div>
       </div>
-
-      {/* Modal de Confirmação para Zerar o Ano */}
-      <AlertDialog open={confirmClearOpen} onOpenChange={setConfirmClearOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-rose-600">
-              <Trash2 className="h-5 w-5" />
-              {`Zerar todos os dados de ${year}?`}
-            </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2 pt-1 text-sm">
-              <p>
-                Esta ação vai <strong>excluir todas as transações cadastradas em {year}</strong> e os históricos consolidado da planilha desse ano.
-              </p>
-              <p className="text-xs text-muted-foreground">
-                O ano ficará 100% limpo para você inserir todos os seus novos lançamentos detalhados do zero. Esta ação não poderá ser desfeita.
-              </p>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={clearing}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-rose-600 text-white hover:bg-rose-700"
-              onClick={(e) => {
-                e.preventDefault();
-                void handleClearYear();
-              }}
-              disabled={clearing}
-            >
-              {clearing ? "Zerando..." : `Sim, zerar dados de ${year}`}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Cartões de Indicadores Anuais */}
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
