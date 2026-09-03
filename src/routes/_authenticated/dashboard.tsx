@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  BarChart3,
   Bell,
+  Calendar,
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
@@ -20,6 +22,7 @@ import { exportYearToExcel } from "@/lib/export";
 import { claimLegacyData } from "@/lib/claim.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -35,11 +38,15 @@ import { TransactionList } from "@/components/finance/TransactionList";
 import { TransactionDialog } from "@/components/finance/TransactionDialog";
 import { InvoiceImportDialog } from "@/components/finance/InvoiceImportDialog";
 import { EmailNotificationDialog } from "@/components/finance/EmailNotificationDialog";
+import { AnnualSummaryView } from "@/components/finance/AnnualSummaryView";
 import {
+  AVAILABLE_YEARS,
   MONTH_NAMES,
   brl,
   createTransactions,
   deleteTransaction,
+  fetchAllYearsHistory,
+  fetchAllYearsTransactions,
   fetchCategories,
   fetchMonthlyHistory,
   fetchTransactions,
@@ -115,6 +122,7 @@ function Dashboard() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
+  const [activeTab, setActiveTab] = useState<"month" | "year">("month");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -140,6 +148,14 @@ function Dashboard() {
   const yearQuery = useQuery({
     queryKey: ["year-transactions", year],
     queryFn: () => fetchYearTransactions(year),
+  });
+  const allHistoryQuery = useQuery({
+    queryKey: ["all-history"],
+    queryFn: fetchAllYearsHistory,
+  });
+  const allTransactionsQuery = useQuery({
+    queryKey: ["all-transactions"],
+    queryFn: fetchAllYearsTransactions,
   });
 
   const categories = categoriesQuery.data ?? [];
@@ -177,6 +193,8 @@ function Dashboard() {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["transactions"] });
     void queryClient.invalidateQueries({ queryKey: ["year-transactions"] });
+    void queryClient.invalidateQueries({ queryKey: ["all-history"] });
+    void queryClient.invalidateQueries({ queryKey: ["all-transactions"] });
   };
 
   const saveMutation = useMutation({
@@ -260,41 +278,74 @@ function Dashboard() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 rounded-xl border border-border bg-secondary/40 p-1">
-            <Button variant="ghost" size="icon" onClick={() => shiftMonth(-1)} aria-label="Mês anterior">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Select
-              value={String(month)}
-              onValueChange={(v) => setMonth(Number(v))}
-            >
-              <SelectTrigger className="h-9 w-32 border-0 bg-transparent text-sm font-medium">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTH_NAMES.map((name, i) => (
-                  <SelectItem key={name} value={String(i)}>
-                    {name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-              <SelectTrigger className="h-9 w-24 border-0 bg-transparent text-sm font-medium">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[2024, 2025, 2026, 2027].map((y) => (
-                  <SelectItem key={y} value={String(y)}>
-                    {y}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button variant="ghost" size="icon" onClick={() => shiftMonth(1)} aria-label="Próximo mês">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+          {activeTab === "month" ? (
+            <div className="flex items-center gap-1 rounded-xl border border-border bg-secondary/40 p-1">
+              <Button variant="ghost" size="icon" onClick={() => shiftMonth(-1)} aria-label="Mês anterior">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Select
+                value={String(month)}
+                onValueChange={(v) => setMonth(Number(v))}
+              >
+                <SelectTrigger className="h-9 w-32 border-0 bg-transparent text-sm font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTH_NAMES.map((name, i) => (
+                    <SelectItem key={name} value={String(i)}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+                <SelectTrigger className="h-9 w-24 border-0 bg-transparent text-sm font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AVAILABLE_YEARS.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="ghost" size="icon" onClick={() => shiftMonth(1)} aria-label="Próximo mês">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 rounded-xl border border-border bg-secondary/40 p-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setYear((prev) => prev - 1)}
+                aria-label="Ano anterior"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+                <SelectTrigger className="h-9 w-28 border-0 bg-transparent text-sm font-medium font-semibold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AVAILABLE_YEARS.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setYear((prev) => prev + 1)}
+                aria-label="Próximo ano"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
 
           <Button
             variant="ghost"
@@ -338,95 +389,161 @@ function Dashboard() {
         </div>
       </header>
 
-      {/* Conteúdo dinâmico do mês selecionado com chave estável */}
-      <div key={`month-view-${year}-${month}`} className="space-y-6">
-        {/* Banner de Lembrete: Contas Vencendo Hoje em Aberto */}
-        {dueTodayExpenses.length > 0 ? (
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-800 dark:text-amber-200 shadow-xs">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
-                <Bell className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="font-semibold text-sm text-foreground">
-                  {`Você tem ${dueTodayExpenses.length} ${dueTodayExpenses.length === 1 ? "conta" : "contas"} vencendo hoje (${brl(totalDueToday)}) em aberto`}
-                </p>
-                <p className="text-muted-foreground text-[11px] mt-0.5">
-                  Os lembretes são enviados de forma 100% automática por e-mail no dia do vencimento.
-                </p>
-              </div>
-            </div>
+      {/* Barra de Navegação de Abas: Visão Mensal vs Resumo do Ano */}
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-3">
+        <div className="flex items-center gap-1.5 rounded-xl bg-secondary/50 p-1 border border-border/40">
+          <Button
+            type="button"
+            variant={activeTab === "month" ? "default" : "ghost"}
+            size="sm"
+            className="h-8 text-xs gap-1.5 font-medium rounded-lg"
+            onClick={() => setActiveTab("month")}
+          >
+            <Calendar className="h-3.5 w-3.5" />
+            <span>Visão Mensal</span>
+            <span className="text-[10px] opacity-80">{`(${MONTH_NAMES[month]} ${year})`}</span>
+          </Button>
 
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs border-amber-500/40 text-amber-800 dark:text-amber-200 hover:bg-amber-500/20"
-                onClick={() => setNotificationOpen(true)}
-              >
-                <Bell className="mr-1.5 h-3.5 w-3.5" />
-                Ver lembretes por e-mail
-              </Button>
-            </div>
+          <Button
+            type="button"
+            variant={activeTab === "year" ? "default" : "ghost"}
+            size="sm"
+            className="h-8 text-xs gap-1.5 font-medium rounded-lg"
+            onClick={() => setActiveTab("year")}
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            <span>Resumo do Ano</span>
+            <span className="text-[10px] opacity-80">{`(${year})`}</span>
+          </Button>
+        </div>
+
+        {activeTab === "month" ? (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>Visualizando:</span>
+            <Badge variant="outline" className="text-xs font-semibold text-foreground">
+              {`${MONTH_NAMES[month]} de ${year}`}
+            </Badge>
           </div>
-        ) : null}
-
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            label="Entradas do mês"
-            value={totals.income}
-            icon={TrendingUp}
-            tone="primary"
-            {...(monthHistory ? { hint: "Inclui histórico da planilha" } : {})}
-          />
-          <StatCard
-            label="Gastos do mês"
-            value={totals.expenses}
-            icon={TrendingDown}
-            tone="danger"
-            {...(monthHistory ? { hint: "Inclui histórico da planilha" } : {})}
-          />
-
-          <StatCard
-            label="Saldo"
-            value={totals.balance}
-            icon={Wallet}
-            tone={totals.balance >= 0 ? "primary" : "danger"}
-            hint={totals.balance >= 0 ? "Você está no azul" : "Atenção ao vermelho"}
-          />
-          <StatCard
-            label="A pagar"
-            value={totals.pending}
-            icon={Clock3}
-            tone="warning"
-            hint={`${transactions.filter((t) => t.kind === "expense" && !t.is_paid).length} despesas em aberto`}
-          />
-        </section>
-
-        <section className="mt-6 grid gap-4 lg:grid-cols-2">
-          <CategoryBreakdown transactions={transactions} categories={categories} />
-          <YearOverview year={year} history={historyQuery.data ?? []} transactions={yearQuery.data ?? []} />
-        </section>
-
-        <section className="mt-6">
-          <TransactionList
-            transactions={transactions}
-            categories={categories}
-            onTogglePaid={(t) => paidMutation.mutate(t)}
-            onToggleBatchPaid={(ids, isPaid) => batchPaidMutation.mutate({ ids, isPaid })}
-            onEdit={(t) => {
-              setEditing(t);
-              setDialogOpen(true);
-            }}
-            onDelete={(t) => deleteMutation.mutate(t)}
-          />
-        </section>
-
-        <footer className="mt-8 flex items-center gap-2 text-xs text-muted-foreground">
-          <CircleDollarSign className="h-3.5 w-3.5" />
-          <span>{`Total lançado em ${MONTH_NAMES[month]}: ${brl(totals.income + totals.expenses)}`}</span>
-        </footer>
+        ) : (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>Visão consolidada de:</span>
+            <Badge variant="outline" className="text-xs font-semibold text-foreground">
+              {`Ano ${year}`}
+            </Badge>
+          </div>
+        )}
       </div>
+
+      {activeTab === "month" ? (
+        /* Conteúdo dinâmico do mês selecionado com chave estável */
+        <div key={`month-view-${year}-${month}`} className="mt-6 space-y-6 animate-in fade-in duration-200">
+          {/* Banner de Lembrete: Contas Vencendo Hoje em Aberto */}
+          {dueTodayExpenses.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-800 dark:text-amber-200 shadow-xs">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                  <Bell className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm text-foreground">
+                    {`Você tem ${dueTodayExpenses.length} ${dueTodayExpenses.length === 1 ? "conta" : "contas"} vencendo hoje (${brl(totalDueToday)}) em aberto`}
+                  </p>
+                  <p className="text-muted-foreground text-[11px] mt-0.5">
+                    Os lembretes são enviados de forma 100% automática por e-mail no dia do vencimento.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs border-amber-500/40 text-amber-800 dark:text-amber-200 hover:bg-amber-500/20"
+                  onClick={() => setNotificationOpen(true)}
+                >
+                  <Bell className="mr-1.5 h-3.5 w-3.5" />
+                  Ver lembretes por e-mail
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="Entradas do mês"
+              value={totals.income}
+              icon={TrendingUp}
+              tone="primary"
+              {...(monthHistory ? { hint: "Inclui histórico da planilha" } : {})}
+            />
+            <StatCard
+              label="Gastos do mês"
+              value={totals.expenses}
+              icon={TrendingDown}
+              tone="danger"
+              {...(monthHistory ? { hint: "Inclui histórico da planilha" } : {})}
+            />
+
+            <StatCard
+              label="Saldo"
+              value={totals.balance}
+              icon={Wallet}
+              tone={totals.balance >= 0 ? "primary" : "danger"}
+              hint={totals.balance >= 0 ? "Você está no azul" : "Atenção ao vermelho"}
+            />
+            <StatCard
+              label="A pagar"
+              value={totals.pending}
+              icon={Clock3}
+              tone="warning"
+              hint={`${transactions.filter((t) => t.kind === "expense" && !t.is_paid).length} despesas em aberto`}
+            />
+          </section>
+
+          <section className="grid gap-4 lg:grid-cols-2">
+            <CategoryBreakdown transactions={transactions} categories={categories} />
+            <YearOverview year={year} history={historyQuery.data ?? []} transactions={yearQuery.data ?? []} />
+          </section>
+
+          <section>
+            <TransactionList
+              transactions={transactions}
+              categories={categories}
+              onTogglePaid={(t) => paidMutation.mutate(t)}
+              onToggleBatchPaid={(ids, isPaid) => batchPaidMutation.mutate({ ids, isPaid })}
+              onEdit={(t) => {
+                setEditing(t);
+                setDialogOpen(true);
+              }}
+              onDelete={(t) => deleteMutation.mutate(t)}
+            />
+          </section>
+
+          <footer className="mt-8 flex items-center gap-2 text-xs text-muted-foreground">
+            <CircleDollarSign className="h-3.5 w-3.5" />
+            <span>{`Total lançado em ${MONTH_NAMES[month]}: ${brl(totals.income + totals.expenses)}`}</span>
+          </footer>
+        </div>
+      ) : (
+        /* Aba de Resumo do Ano */
+        <div key={`year-view-${year}`} className="mt-6">
+          <AnnualSummaryView
+            year={year}
+            onSelectYear={(y) => setYear(y)}
+            onSelectMonth={(m) => setMonth(m)}
+            onNavigateToMonth={(y, m) => {
+              setYear(y);
+              setMonth(m);
+              setActiveTab("month");
+            }}
+            history={historyQuery.data ?? []}
+            transactions={yearQuery.data ?? []}
+            allHistory={allHistoryQuery.data ?? []}
+            allTransactions={allTransactionsQuery.data ?? []}
+            categories={categories}
+          />
+        </div>
+      )}
 
       <TransactionDialog
         open={dialogOpen}

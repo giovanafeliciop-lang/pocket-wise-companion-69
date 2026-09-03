@@ -55,6 +55,17 @@ export const PAYMENT_METHODS = [
   { value: "transferencia", label: "Transferência" },
 ];
 
+export const AVAILABLE_YEARS = [
+  2023,
+  2024,
+  2025,
+  2026,
+  2027,
+  2028,
+  2029,
+  2030,
+] as const;
+
 export const MONTH_NAMES = [
   "Janeiro",
   "Fevereiro",
@@ -265,6 +276,29 @@ export async function fetchYearTransactions(year: number): Promise<Transaction[]
     .gte("occurred_on", `${year}-01-01`)
     .lte("occurred_on", `${year}-12-31`);
   if (error) throw error;
+  return (data ?? []).map((t) => ({ ...t, amount: Number(t.amount) })) as Transaction[];
+}
+
+export async function fetchAllYearsHistory(): Promise<MonthlyHistory[]> {
+  const { data, error } = await supabase
+    .from("monthly_history")
+    .select("*")
+    .order("year")
+    .order("month");
+  if (error) return [];
+  return (data ?? []).map((r) => ({
+    ...r,
+    expenses: Number(r.expenses),
+    income: Number(r.income),
+  })) as MonthlyHistory[];
+}
+
+export async function fetchAllYearsTransactions(): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("*")
+    .order("occurred_on");
+  if (error) return [];
   return (data ?? []).map((t) => ({ ...t, amount: Number(t.amount) })) as Transaction[];
 }
 
