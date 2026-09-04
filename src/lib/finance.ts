@@ -170,6 +170,7 @@ export async function fetchCategories(): Promise<Category[]> {
     { name: "Mercado", kind: "expense", color: "#10b981", icon: "shopping-cart" },
     { name: "Doações", kind: "expense", color: "#0d9488", icon: "hand-heart" },
     { name: "Juros", kind: "expense", color: "#e11d48", icon: "percent" },
+    { name: "Viagem", kind: "expense", color: "#38bdf8", icon: "plane" },
   ];
 
   const missingDefaults = requiredDefaults.filter(
@@ -319,7 +320,6 @@ export async function resolveCategoryId(idOrName: string | null | undefined): Pr
     upper.includes("LAZER") ||
     upper.includes("STREAMING") ||
     upper.includes("NETFLIX") ||
-    upper.includes("VIAGEM") ||
     upper.includes("SHOW") ||
     upper.includes("CINEMA")
   ) {
@@ -390,6 +390,19 @@ export async function resolveCategoryId(idOrName: string | null | undefined): Pr
     searchName = "Juros";
     defaultColor = "#e11d48";
     defaultIcon = "percent";
+  } else if (
+    upper.includes("VIAGEM") ||
+    upper.includes("PASSAGEM") ||
+    upper.includes("HOTEL") ||
+    upper.includes("POUSADA") ||
+    upper.includes("AIRBNB") ||
+    upper.includes("BOOKING") ||
+    upper.includes("DECOLAR") ||
+    upper.includes("HOSPEDAGEM")
+  ) {
+    searchName = "Viagem";
+    defaultColor = "#38bdf8";
+    defaultIcon = "plane";
   }
 
   // Verifica novamente apos normalizacao de sinonimo
