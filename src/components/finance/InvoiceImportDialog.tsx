@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CreditCard, FileText, ImageIcon, Loader2, Sparkles, Trash2, Upload } from "lucide-react";
+import { CreditCard, FileText, ImageIcon, Loader2, Plus, Sparkles, Trash2, Upload } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -95,13 +95,33 @@ export function InvoiceImportDialog({
       };
     });
 
+  const handleAddManualDraft = () => {
+    const defaultCatId =
+      expenseCats.find((c) => normalize(c.name) === "outros")?.id ??
+      expenseCats[0]?.id ??
+      null;
+
+    setDrafts((prev) => [
+      ...(prev ?? []),
+      {
+        description: "",
+        amount: 0,
+        purchase_date: invoiceDate,
+        category_id: defaultCatId,
+      },
+    ]);
+  };
+
   const runText = async () => {
     if (!text.trim()) return;
     setLoading(true);
     try {
       const res = await parse({ data: { mode: "text", text, categories: catNames } });
-      setDrafts(toDrafts(res.items));
-      if (!res.items.length) toast.error("Nenhum lançamento identificado.");
+      const converted = toDrafts(res.items);
+      setDrafts(converted);
+      if (!converted.length) {
+        toast.info("Nenhum lançamento identificado automaticamente. Você pode adicionar manualmente.");
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao ler a fatura");
     } finally {
@@ -126,8 +146,11 @@ export function InvoiceImportDialog({
           categories: catNames,
         },
       });
-      setDrafts(toDrafts(res.items));
-      if (!res.items.length) toast.error("Nenhum lançamento identificado.");
+      const converted = toDrafts(res.items);
+      setDrafts(converted);
+      if (!converted.length) {
+        toast.info("Nenhum lançamento identificado automaticamente. Você pode adicionar manualmente.");
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao ler o arquivo");
     } finally {
@@ -139,13 +162,35 @@ export function InvoiceImportDialog({
     cardName === "Outro" ? customCard.trim() || "Cartão de Crédito" : cardName || "Cartão";
 
   const confirm = async () => {
-    if (!drafts?.length) return;
+    if (!drafts?.length) {
+      toast.error("Adicione ao menos uma despesa na fatura.");
+      return;
+    }
+
+    const validDrafts = drafts.filter((d) => d.description.trim() !== "" || d.amount > 0);
+    if (!validDrafts.length) {
+      toast.error("Preencha ao menos uma despesa com descrição e valor.");
+      return;
+    }
+
+    const emptyDesc = validDrafts.find((d) => !d.description.trim());
+    if (emptyDesc) {
+      toast.error("Preencha a descrição de todas as despesas adicionadas.");
+      return;
+    }
+
+    const zeroAmount = validDrafts.find((d) => d.amount <= 0);
+    if (zeroAmount) {
+      toast.error(`Informe um valor maior que zero para "${zeroAmount.description}".`);
+      return;
+    }
+
     setSaving(true);
     try {
       await onConfirm(
-        drafts.map((d) => ({
+        validDrafts.map((d) => ({
           kind: "expense" as const,
-          description: d.description,
+          description: d.description.trim(),
           amount: d.amount,
           occurred_on: invoiceDate, // Todas as compras entram no mês de vencimento da fatura!
           category_id: d.category_id,
@@ -156,7 +201,7 @@ export function InvoiceImportDialog({
           notes: d.purchase_date ? `Compra em ${formatDate(d.purchase_date)}` : null,
         })),
       );
-      toast.success(`${drafts.length} lançamentos da fatura (${resolvedCard}) importados!`);
+      toast.success(`${validDrafts.length} lançamentos da fatura (${resolvedCard}) importados!`);
       reset();
       onOpenChange(false);
     } catch (e) {
@@ -172,7 +217,7 @@ export function InvoiceImportDialog({
     setFileName("");
   };
 
-  const total = drafts?.reduce((sum, d) => sum + d.amount, 0) ?? 0;
+  const total = drafts?.reduce((sum, d) => sum + (d.amount || 0), 0) ?? 0;
 
   return (
     <Dialog
@@ -189,7 +234,7 @@ export function InvoiceImportDialog({
             Importar fatura do cartão
           </DialogTitle>
           <DialogDescription>
-            Envie a fatura para extrair cada compra com sua categoria. Todos os gastos serão
+            Envie a fatura para extrair cada compra com IA ou adicione itens manualmente. Todos os gastos serão
             unificados na fatura do mês selecionado.
           </DialogDescription>
         </DialogHeader>
@@ -245,151 +290,242 @@ export function InvoiceImportDialog({
         </div>
 
         {!drafts ? (
-          <Tabs defaultValue="file">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="file">PDF ou imagem</TabsTrigger>
-              <TabsTrigger value="text">Texto</TabsTrigger>
-            </TabsList>
+          <div className="space-y-3">
+            <Tabs defaultValue="file">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="file">PDF ou imagem</TabsTrigger>
+                <TabsTrigger value="text">Texto</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="file" className="mt-4">
-              <button
+              <TabsContent value="file" className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => fileInput.current?.click()}
+                  className="flex w-full flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-secondary/30 px-6 py-12 text-center transition-colors hover:border-primary/60 hover:bg-secondary/50"
+                >
+                  {loading ? (
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  ) : (
+                    <Upload className="h-8 w-8 text-primary" />
+                  )}
+                  <span className="text-sm font-medium">
+                    {loading ? "Lendo a fatura..." : fileName || "Clique para escolher o arquivo"}
+                  </span>
+                  <span className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <FileText className="h-3.5 w-3.5" /> PDF
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <ImageIcon className="h-3.5 w-3.5" /> JPG / PNG
+                    </span>
+                  </span>
+                </button>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept="application/pdf,image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void runFile(file);
+                    e.target.value = "";
+                  }}
+                />
+              </TabsContent>
+
+              <TabsContent value="text" className="mt-4 space-y-3">
+                <Textarea
+                  rows={9}
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Cole aqui as linhas da fatura..."
+                />
+                <Button onClick={runText} disabled={loading || !text.trim()} className="w-full">
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Analisar com IA
+                </Button>
+              </TabsContent>
+            </Tabs>
+
+            <div className="pt-2 text-center border-t border-border/30">
+              <Button
                 type="button"
-                onClick={() => fileInput.current?.click()}
-                className="flex w-full flex-col items-center gap-3 rounded-2xl border border-dashed border-border bg-secondary/30 px-6 py-12 text-center transition-colors hover:border-primary/60 hover:bg-secondary/50"
+                variant="ghost"
+                size="sm"
+                onClick={handleAddManualDraft}
+                className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-primary hover:bg-primary/5"
               >
-                {loading ? (
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                ) : (
-                  <Upload className="h-8 w-8 text-primary" />
-                )}
-                <span className="text-sm font-medium">
-                  {loading ? "Lendo a fatura..." : fileName || "Clique para escolher o arquivo"}
-                </span>
-                <span className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <FileText className="h-3.5 w-3.5" /> PDF
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <ImageIcon className="h-3.5 w-3.5" /> JPG / PNG
-                  </span>
-                </span>
-              </button>
-              <input
-                ref={fileInput}
-                type="file"
-                accept="application/pdf,image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void runFile(file);
-                  e.target.value = "";
-                }}
-              />
-            </TabsContent>
-
-            <TabsContent value="text" className="mt-4 space-y-3">
-              <Textarea
-                rows={9}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Cole aqui as linhas da fatura..."
-              />
-              <Button onClick={runText} disabled={loading || !text.trim()} className="w-full">
-                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Analisar com IA
+                <Plus className="h-3.5 w-3.5" />
+                Preencher despesas da fatura manualmente
               </Button>
-            </TabsContent>
-          </Tabs>
+            </div>
+          </div>
         ) : (
           <div className="space-y-3">
-            <div className="flex items-center justify-between rounded-xl bg-secondary/40 px-3 py-2 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-secondary/40 px-3 py-2 text-sm">
               <span className="text-xs text-muted-foreground">
-                <strong>{drafts.length}</strong> compras identificadas em{" "}
+                <strong>{drafts.length}</strong> {drafts.length === 1 ? "compra identificada" : "compras identificadas"} em{" "}
                 <strong className="text-foreground">{resolvedCard}</strong>
               </span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Total da fatura:</span>
-                <span className="numeric font-bold text-foreground">{brl(total)}</span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-muted-foreground">Total:</span>
+                  <span className="numeric font-bold text-foreground">{brl(total)}</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddManualDraft}
+                  className="h-7 gap-1 px-2.5 text-xs font-medium border-primary/30 text-primary hover:bg-primary/10"
+                >
+                  <Plus className="h-3 w-3" />
+                  Adicionar item
+                </Button>
               </div>
             </div>
 
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-              {drafts.map((d, index) => (
-                <div
-                  key={`${d.description}-${index}`}
-                  className="grid grid-cols-12 items-center gap-2 rounded-xl border border-border bg-secondary/30 p-2 text-xs"
+            {drafts.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border bg-secondary/20 p-6 text-center space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Nenhuma despesa na lista. Clique abaixo para adicionar itens manualmente.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddManualDraft}
+                  className="gap-1.5 text-xs"
                 >
-                  <div className="col-span-12 sm:col-span-5 space-y-0.5">
-                    <Input
-                      className="h-8 text-xs"
-                      value={d.description}
-                      onChange={(e) =>
-                        setDrafts((prev) =>
-                          prev!.map((row, i) =>
-                            i === index ? { ...row, description: e.target.value } : row,
-                          ),
-                        )
-                      }
-                      placeholder="Descrição"
-                    />
-                    {d.purchase_date ? (
-                      <p className="text-[10px] text-muted-foreground px-1">
-                        Data original: {formatDate(d.purchase_date)}
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div className="col-span-4 sm:col-span-3">
-                    <Input
-                      className="numeric h-8 text-xs font-semibold"
-                      value={d.amount}
-                      onChange={(e) =>
-                        setDrafts((prev) =>
-                          prev!.map((row, i) =>
-                            i === index ? { ...row, amount: Number(e.target.value) || 0 } : row,
-                          ),
-                        )
-                      }
-                    />
-                  </div>
-
-                  <div className="col-span-7 sm:col-span-3">
-                    <Select
-                      value={d.category_id ?? ""}
-                      onValueChange={(v) =>
-                        setDrafts((prev) =>
-                          prev!.map((row, i) => (i === index ? { ...row, category_id: v } : row)),
-                        )
-                      }
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Categoria" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {expenseCats.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="col-span-1 h-8 w-8 text-muted-foreground hover:text-destructive"
-                    onClick={() => setDrafts((prev) => prev!.filter((_, i) => i !== index))}
+                  <Plus className="h-3.5 w-3.5" /> Adicionar despesa manual
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {drafts.map((d, index) => (
+                  <div
+                    key={`draft-${index}`}
+                    className="grid grid-cols-12 items-center gap-2 rounded-xl border border-border bg-secondary/30 p-2.5 text-xs"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+                    <div className="col-span-12 sm:col-span-5 space-y-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={d.description}
+                        onChange={(e) =>
+                          setDrafts((prev) =>
+                            prev!.map((row, i) =>
+                              i === index ? { ...row, description: e.target.value } : row,
+                            ),
+                          )
+                        }
+                        placeholder="Descrição (ex.: Juros, Compra)"
+                      />
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                          Data compra:
+                        </span>
+                        <Input
+                          type="date"
+                          className="h-6 text-[10px] py-0 px-1.5 w-32"
+                          value={d.purchase_date || invoiceDate}
+                          onChange={(e) =>
+                            setDrafts((prev) =>
+                              prev!.map((row, i) =>
+                                i === index ? { ...row, purchase_date: e.target.value } : row,
+                              ),
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="col-span-5 sm:col-span-3">
+                      <div className="relative">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">
+                          R$
+                        </span>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="numeric h-8 text-xs font-semibold pl-6"
+                          value={d.amount === 0 ? "" : d.amount}
+                          placeholder="0,00"
+                          onChange={(e) =>
+                            setDrafts((prev) =>
+                              prev!.map((row, i) =>
+                                i === index
+                                  ? {
+                                      ...row,
+                                      amount: e.target.value === "" ? 0 : parseFloat(e.target.value) || 0,
+                                    }
+                                  : row,
+                              ),
+                            )
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="col-span-5 sm:col-span-3">
+                      <Select
+                        value={d.category_id ?? ""}
+                        onValueChange={(v) =>
+                          setDrafts((prev) =>
+                            prev!.map((row, i) => (i === index ? { ...row, category_id: v } : row)),
+                          )
+                        }
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Categoria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {expenseCats.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="col-span-2 sm:col-span-1 flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => setDrafts((prev) => prev!.filter((_, i) => i !== index))}
+                        title="Excluir despesa"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {drafts.length > 0 ? (
+              <div className="flex items-center justify-between pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddManualDraft}
+                  className="h-8 gap-1.5 text-xs text-primary border-dashed border-primary/40 hover:bg-primary/10"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Adicionar outra despesa manualmente
+                </Button>
+                <span className="text-[11px] text-muted-foreground">
+                  {drafts.length} {drafts.length === 1 ? "item" : "itens"} na fatura
+                </span>
+              </div>
+            ) : null}
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:gap-0">
           {drafts ? (
             <>
               <Button variant="ghost" onClick={reset}>

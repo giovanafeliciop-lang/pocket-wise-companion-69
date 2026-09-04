@@ -169,6 +169,7 @@ export async function fetchCategories(): Promise<Category[]> {
   const requiredDefaults = [
     { name: "Mercado", kind: "expense", color: "#10b981", icon: "shopping-cart" },
     { name: "Doações", kind: "expense", color: "#0d9488", icon: "hand-heart" },
+    { name: "Juros", kind: "expense", color: "#e11d48", icon: "percent" },
   ];
 
   const missingDefaults = requiredDefaults.filter(
@@ -378,6 +379,17 @@ export async function resolveCategoryId(idOrName: string | null | undefined): Pr
     searchName = "Milhas";
     defaultColor = "#eab308";
     defaultIcon = "plane";
+  } else if (
+    upper.includes("JUROS") ||
+    upper.includes("ENCARGO") ||
+    upper.includes("MULTA") ||
+    upper.includes("IOF") ||
+    upper.includes("ROTATIVO") ||
+    upper.includes("MORA")
+  ) {
+    searchName = "Juros";
+    defaultColor = "#e11d48";
+    defaultIcon = "percent";
   }
 
   // Verifica novamente apos normalizacao de sinonimo

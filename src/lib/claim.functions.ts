@@ -16,6 +16,7 @@ export const DEFAULT_CATEGORY_SEEDS = [
   { name: "Telefone", kind: "expense", color: "#06b6d4", icon: "phone" },
   { name: "Milhas", kind: "expense", color: "#eab308", icon: "plane" },
   { name: "Contas", kind: "expense", color: "#f43f5e", icon: "receipt" },
+  { name: "Juros", kind: "expense", color: "#e11d48", icon: "percent" },
   { name: "Outros", kind: "expense", color: "#64748b", icon: "circle-dashed" },
   { name: "Salário", kind: "income", color: "#22c55e", icon: "wallet" },
   { name: "Freelance", kind: "income", color: "#10b981", icon: "briefcase" },
