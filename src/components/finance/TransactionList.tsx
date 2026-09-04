@@ -20,6 +20,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import {
   PAYMENT_METHODS,
@@ -37,6 +47,7 @@ type Props = {
   onTogglePaid: (t: Transaction) => void;
   onToggleBatchPaid?: (ids: string[], isPaid: boolean) => void;
   onPayInvoice?: (params: PayInvoiceParams) => Promise<void>;
+  onDeleteInvoice?: (cardName: string, items: Transaction[]) => Promise<void> | void;
   onEdit: (t: Transaction) => void;
   onDelete: (t: Transaction) => void;
 };
@@ -92,6 +103,7 @@ export function TransactionList({
   onTogglePaid,
   onToggleBatchPaid,
   onPayInvoice,
+  onDeleteInvoice,
   onEdit,
   onDelete,
 }: Props) {
@@ -99,6 +111,10 @@ export function TransactionList({
   const [filter, setFilter] = useState("all");
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [payDialogInvoice, setPayDialogInvoice] = useState<{
+    cardName: string;
+    items: Transaction[];
+  } | null>(null);
+  const [deleteInvoiceConfirm, setDeleteInvoiceConfirm] = useState<{
     cardName: string;
     items: Transaction[];
   } | null>(null);
@@ -358,24 +374,38 @@ export function TransactionList({
 
                     {/* Botões de Ação */}
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-1.5 border-t border-border/50 pt-2 text-xs">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs text-muted-foreground gap-1 px-2"
-                        onClick={() => setExpandedCard(isExpanded ? null : cardName)}
-                      >
-                        {isExpanded ? (
-                          <>
-                            <ChevronUp className="h-3.5 w-3.5" /> Ocultar compras
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="h-3.5 w-3.5" />
-                            {`Ver itens (${items.length})`}
-                          </>
-                        )}
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-muted-foreground gap-1 px-2"
+                          onClick={() => setExpandedCard(isExpanded ? null : cardName)}
+                        >
+                          {isExpanded ? (
+                            <>
+                              <ChevronUp className="h-3.5 w-3.5" /> Ocultar compras
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="h-3.5 w-3.5" />
+                              {`Ver itens (${items.length})`}
+                            </>
+                          )}
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 gap-1 px-2"
+                          onClick={() => setDeleteInvoiceConfirm({ cardName, items })}
+                          title="Excluir todos os lançamentos desta fatura"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          <span className="text-destructive">Excluir fatura</span>
+                        </Button>
+                      </div>
 
                       <div className="flex items-center gap-1">
                         {isAllPaid ? (
@@ -494,16 +524,28 @@ export function TransactionList({
                                     </span>
                                   ) : null}
                                 </div>
-                                <span
-                                  className={cn(
-                                    "numeric font-semibold ml-2 shrink-0",
-                                    item.is_paid
-                                      ? "text-muted-foreground line-through"
-                                      : "text-foreground",
-                                  )}
-                                >
-                                  {brl(item.amount)}
-                                </span>
+                                <div className="flex items-center gap-1 shrink-0 ml-2">
+                                  <span
+                                    className={cn(
+                                      "numeric font-semibold",
+                                      item.is_paid
+                                        ? "text-muted-foreground line-through"
+                                        : "text-foreground",
+                                    )}
+                                  >
+                                    {brl(item.amount)}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0 opacity-60 hover:opacity-100"
+                                    title="Excluir este lançamento da fatura"
+                                    onClick={() => onDelete(item)}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
                               </div>
                             );
                           })}
@@ -687,6 +729,17 @@ export function TransactionList({
                       <span>Pagar</span>
                     </Button>
                   ) : null}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    onClick={() =>
+                      setDeleteInvoiceConfirm({ cardName: item.cardName, items: item.items })
+                    }
+                    title="Excluir fatura importada"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
             );
@@ -795,6 +848,60 @@ export function TransactionList({
           }
         }}
       />
+
+      {/* Confirmação de Exclusão da Fatura de Cartão */}
+      <AlertDialog
+        open={Boolean(deleteInvoiceConfirm)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteInvoiceConfirm(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
+              <span>{`Excluir fatura do cartão ${deleteInvoiceConfirm?.cardName}?`}</span>
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-sm text-muted-foreground pt-1">
+              <p>
+                {`Você está prestes a excluir permanentemente todos os `}
+                <strong className="text-foreground">
+                  {deleteInvoiceConfirm?.items.length ?? 0} lançamentos
+                </strong>
+                {` vinculados à fatura do cartão `}
+                <strong className="text-foreground">{deleteInvoiceConfirm?.cardName}</strong>
+                {` neste mês (totalizando `}
+                <strong className="text-foreground">
+                  {brl(
+                    deleteInvoiceConfirm?.items.reduce((s, i) => s + i.amount, 0) ?? 0,
+                  )}
+                </strong>
+                {`).`}
+              </p>
+              <p>
+                Isso removerá todos os lançamentos desta fatura para que você possa corrigir os dados e importá-la novamente.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (deleteInvoiceConfirm && onDeleteInvoice) {
+                  await onDeleteInvoice(
+                    deleteInvoiceConfirm.cardName,
+                    deleteInvoiceConfirm.items,
+                  );
+                  setDeleteInvoiceConfirm(null);
+                }
+              }}
+            >
+              Sim, excluir fatura
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

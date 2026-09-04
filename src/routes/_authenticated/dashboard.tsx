@@ -45,6 +45,7 @@ import {
   MONTH_NAMES,
   brl,
   createTransactions,
+  deleteInvoice,
   deleteTransaction,
   fetchAllYearsHistory,
   fetchAllYearsTransactions,
@@ -284,6 +285,20 @@ function Dashboard() {
     onSuccess: () => {
       invalidate();
       toast.success("Lançamento removido");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteInvoiceMutation = useMutation({
+    mutationFn: ({ cardName, ids }: { cardName: string; ids: string[] }) =>
+      deleteInvoice(ids),
+    onSuccess: (_, variables) => {
+      invalidate();
+      toast.success(
+        `Fatura do cartão ${variables.cardName} (${variables.ids.length} ${
+          variables.ids.length === 1 ? "lançamento" : "lançamentos"
+        }) excluída com sucesso!`,
+      );
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -555,6 +570,12 @@ function Dashboard() {
               onToggleBatchPaid={(ids, isPaid) => batchPaidMutation.mutate({ ids, isPaid })}
               onPayInvoice={async (params) => {
                 await payInvoiceMutation.mutateAsync(params);
+              }}
+              onDeleteInvoice={async (cardName, items) => {
+                await deleteInvoiceMutation.mutateAsync({
+                  cardName,
+                  ids: items.map((i) => i.id),
+                });
               }}
               onEdit={(t) => {
                 setEditing(t);
