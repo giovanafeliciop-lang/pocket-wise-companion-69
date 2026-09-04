@@ -11,6 +11,7 @@ export const DEFAULT_CATEGORY_SEEDS = [
   { name: "Lazer", kind: "expense", color: "#ec4899", icon: "party-popper" },
   { name: "Assinaturas", kind: "expense", color: "#14b8a6", icon: "repeat" },
   { name: "Compras", kind: "expense", color: "#f97316", icon: "shopping-bag" },
+  { name: "Doações", kind: "expense", color: "#0d9488", icon: "hand-heart" },
   { name: "Dízimo", kind: "expense", color: "#059669", icon: "hand-heart" },
   { name: "Telefone", kind: "expense", color: "#06b6d4", icon: "phone" },
   { name: "Milhas", kind: "expense", color: "#eab308", icon: "plane" },

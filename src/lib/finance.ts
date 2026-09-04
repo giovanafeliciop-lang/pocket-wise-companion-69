@@ -165,33 +165,50 @@ export async function fetchCategories(): Promise<Category[]> {
   if (error) throw error;
   const list = (data ?? []) as Category[];
 
-  // Garante que a categoria Mercado exista no banco
-  const hasMercado = list.some(
-    (c) => c.name.toLowerCase().trim() === "mercado"
+  // Garante que categorias essenciais padrão existam no banco
+  const requiredDefaults = [
+    { name: "Mercado", kind: "expense", color: "#10b981", icon: "shopping-cart" },
+    { name: "Doações", kind: "expense", color: "#0d9488", icon: "hand-heart" },
+  ];
+
+  const missingDefaults = requiredDefaults.filter(
+    (req) =>
+      !list.some(
+        (c) =>
+          c.name
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .trim() ===
+          req.name
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .trim()
+      )
   );
 
-  if (!hasMercado) {
+  if (missingDefaults.length > 0) {
     try {
       const { data: auth } = await supabase.auth.getUser();
       const userId = auth.user?.id;
-      const { data: created, error: insertErr } = await supabase
-        .from("categories")
-        .insert({
-          name: "Mercado",
-          kind: "expense",
-          color: "#10b981",
-          icon: "shopping-cart",
-          ...(userId ? { user_id: userId } : {}),
-        })
-        .select("*")
-        .maybeSingle();
+      for (const missingCat of missingDefaults) {
+        const { data: created, error: insertErr } = await supabase
+          .from("categories")
+          .insert({
+            ...missingCat,
+            ...(userId ? { user_id: userId } : {}),
+          })
+          .select("*")
+          .maybeSingle();
 
-      if (!insertErr && created) {
-        list.push(created as Category);
-        list.sort((a, b) => a.name.localeCompare(b.name));
+        if (!insertErr && created) {
+          list.push(created as Category);
+        }
       }
+      list.sort((a, b) => a.name.localeCompare(b.name));
     } catch (e) {
-      console.warn("Nao foi possivel autoinserir Mercado:", e);
+      console.warn("Nao foi possivel autoinserir categorias padrão:", e);
     }
   }
 
@@ -339,7 +356,17 @@ export async function resolveCategoryId(idOrName: string | null | undefined): Pr
     searchName = "Educação";
     defaultColor = "#8b5cf6";
     defaultIcon = "graduation-cap";
-  } else if (upper.includes("DIZIMO") || upper.includes("OFERTA") || upper.includes("DOACAO")) {
+  } else if (
+    upper.includes("DOACAO") ||
+    upper.includes("DOACOES") ||
+    upper.includes("DOAR") ||
+    upper.includes("ONG") ||
+    upper.includes("CARIDADE")
+  ) {
+    searchName = "Doações";
+    defaultColor = "#0d9488";
+    defaultIcon = "hand-heart";
+  } else if (upper.includes("DIZIMO") || upper.includes("OFERTA")) {
     searchName = "Dízimo";
     defaultColor = "#059669";
     defaultIcon = "hand-heart";
