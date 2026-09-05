@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportYearToExcel } from "@/lib/export";
-import { claimLegacyData } from "@/lib/claim.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -110,14 +109,6 @@ function DashboardError({ error, reset }: { error: Error; reset: () => void }) {
 function Dashboard() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    void claimLegacyData().then((result) => {
-      if (result?.claimed) {
-        void queryClient.invalidateQueries();
-      }
-    });
-  }, [queryClient]);
 
   const signOut = async () => {
     await queryClient.cancelQueries();
