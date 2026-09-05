@@ -278,7 +278,13 @@ export async function resolveCategoryId(idOrName: string | null | undefined): Pr
     upper.includes("LUZ") ||
     upper.includes("AGUA") ||
     upper.includes("ENERGIA") ||
-    upper.includes("GAS")
+    upper.includes("GAS ENCANADO") ||
+    upper.includes("BOTIJAO") ||
+    upper.includes("COMGAS") ||
+    upper.includes("ULTRAGAZ") ||
+    upper.includes("SUPERGASBRAS") ||
+    upper.includes("LIQUIGAS") ||
+    upper.trim() === "GAS"
   ) {
     searchName = "Contas Básicas";
     defaultColor = "#f43f5e";
@@ -296,6 +302,43 @@ export async function resolveCategoryId(idOrName: string | null | undefined): Pr
     searchName = "Alimentação";
     defaultColor = "#f59e0b";
     defaultIcon = "utensils";
+  } else if (
+    upper.includes("COMBUSTIVEL") ||
+    upper.includes("GASOLINA") ||
+    upper.includes("ETANOL") ||
+    upper.includes("ALCOOL") ||
+    upper.includes("DIESEL") ||
+    upper.includes("GNV") ||
+    upper.includes("POSTO") ||
+    upper.includes("AUTO POSTO") ||
+    upper.includes("AUTOPOSTO") ||
+    upper.includes("ABASTEC") ||
+    upper.includes("IPIRANGA") ||
+    upper.includes("PETROBRAS") ||
+    upper.includes("SHELL") ||
+    upper.includes("ALE COMBUSTIVEIS") ||
+    upper.includes("BOXTER") ||
+    upper.includes("GRAAL") ||
+    upper.includes("TRANSPORTE") ||
+    upper.includes("UBER") ||
+    upper.includes("99APP") ||
+    upper.includes("99 POP") ||
+    upper.includes("99 TAXI") ||
+    upper.includes("CABIFY") ||
+    upper.includes("TAXI") ||
+    upper.includes("PEDAGIO") ||
+    upper.includes("SEM PARAR") ||
+    upper.includes("VELOE") ||
+    upper.includes("CONECTCAR") ||
+    upper.includes("TAGGY") ||
+    upper.includes("METRO") ||
+    upper.includes("ONIBUS") ||
+    upper.includes("CPTM") ||
+    upper.includes("BILHETE UNICO")
+  ) {
+    searchName = "Transporte";
+    defaultColor = "#0ea5e9";
+    defaultIcon = "car";
   } else if (
     upper.includes("OFICINA") ||
     upper.includes("MECANIC") ||
@@ -319,20 +362,6 @@ export async function resolveCategoryId(idOrName: string | null | undefined): Pr
     searchName = "Carro";
     defaultColor = "#2563eb";
     defaultIcon = "wrench";
-  } else if (
-    upper.includes("TRANSPORTE") ||
-    upper.includes("UBER") ||
-    upper.includes("99APP") ||
-    upper.includes("COMBUSTIVEL") ||
-    upper.includes("GASOLINA") ||
-    upper.includes("POSTO") ||
-    upper.includes("PEDAGIO") ||
-    upper.includes("METRO") ||
-    upper.includes("ONIBUS")
-  ) {
-    searchName = "Transporte";
-    defaultColor = "#0ea5e9";
-    defaultIcon = "car";
   } else if (
     upper.includes("SAUDE") ||
     upper.includes("FARMACIA") ||
