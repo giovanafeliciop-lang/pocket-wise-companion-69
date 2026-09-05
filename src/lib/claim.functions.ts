@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Database } from "@/integrations/supabase/types";
 
 export const DEFAULT_CATEGORY_SEEDS = [
   { name: "Moradia", kind: "expense", color: "#6366f1", icon: "home" },
@@ -25,9 +27,12 @@ export const DEFAULT_CATEGORY_SEEDS = [
   { name: "Outras entradas", kind: "income", color: "#84cc16", icon: "plus-circle" },
 ];
 
-export async function ensureDefaultCategoriesInDb() {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: dbCats } = await supabaseAdmin.from("categories").select("*");
+async function ensureDefaultCategoriesInDb(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+) {
+  const { data: dbCats, error: selectError } = await supabase.from("categories").select("*");
+  if (selectError) throw selectError;
   const existing = new Set(
     (dbCats ?? []).map((c) =>
       c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
@@ -42,20 +47,24 @@ export async function ensureDefaultCategoriesInDb() {
   );
 
   if (missing.length > 0) {
-    const { error: insertErr } = await supabaseAdmin.from("categories").insert(missing);
-    if (insertErr) {
-      console.error("[Categories] Erro ao inserir categorias padrão:", insertErr);
-    }
+    const { error: insertErr } = await supabase
+      .from("categories")
+      .insert(missing.map((category) => ({ ...category, user_id: userId })));
+    if (insertErr) throw insertErr;
   }
 
-  const { data: allCats } = await supabaseAdmin.from("categories").select("*").order("name");
+  const { data: allCats, error: allError } = await supabase
+    .from("categories")
+    .select("*")
+    .order("name");
+  if (allError) throw allError;
   return allCats ?? [];
 }
 
 export const syncCategoriesServerFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async () => {
-    return await ensureDefaultCategoriesInDb();
+  .handler(async ({ context }) => {
+    return await ensureDefaultCategoriesInDb(context.supabase, context.userId);
   });
 
 /**
@@ -65,85 +74,26 @@ export const syncCategoriesServerFn = createServerFn({ method: "POST" })
 export const claimLegacyData = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-    // Garante que todas as categorias padrão existam no banco com IDs válidos
-    await ensureDefaultCategoriesInDb();
-
-    const { data: owned, error: ownedError } = await supabaseAdmin
-      .from("monthly_history")
-      .select("id")
-      .not("user_id", "is", null)
-      .limit(1);
-    if (ownedError) throw ownedError;
-
-    const { data: ownedTx, error: ownedTxError } = await supabaseAdmin
-      .from("transactions")
-      .select("id")
-      .not("user_id", "is", null)
-      .limit(1);
-    if (ownedTxError) throw ownedTxError;
-
-    if ((owned?.length ?? 0) > 0 || (ownedTx?.length ?? 0) > 0) {
-      return { claimed: false };
-    }
-
-    const userId = context.userId;
-    const { error: historyError } = await supabaseAdmin
-      .from("monthly_history")
-      .update({ user_id: userId })
-      .is("user_id", null);
-    if (historyError) throw historyError;
-
-    const { error: txError } = await supabaseAdmin
-      .from("transactions")
-      .update({ user_id: userId })
-      .is("user_id", null);
-    if (txError) throw txError;
-
-    return { claimed: true };
+    await ensureDefaultCategoriesInDb(context.supabase, context.userId);
+    return { claimed: false };
   });
 
 export const clearYearDataServerFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((d: { year: number }) => d)
   .handler(async ({ data: { year }, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const userId = context.userId;
+    const { error: txErr } = await context.supabase
+      .from("transactions")
+      .delete()
+      .gte("occurred_on", `${year}-01-01`)
+      .lte("occurred_on", `${year}-12-31`);
+    if (txErr) throw txErr;
 
-    // Remove transações do ano especificado
-    if (userId) {
-      const { error: txErr } = await supabaseAdmin
-        .from("transactions")
-        .delete()
-        .or(`user_id.eq.${userId},user_id.is.null`)
-        .gte("occurred_on", `${year}-01-01`)
-        .lte("occurred_on", `${year}-12-31`);
-      if (txErr) console.error(`[ClearYear] Erro ao deletar transações de ${year}:`, txErr);
-    } else {
-      const { error: txErr } = await supabaseAdmin
-        .from("transactions")
-        .delete()
-        .gte("occurred_on", `${year}-01-01`)
-        .lte("occurred_on", `${year}-12-31`);
-      if (txErr) console.error(`[ClearYear] Erro ao deletar transações de ${year}:`, txErr);
-    }
-
-    // Remove histórico mensal da planilha daquele ano
-    if (userId) {
-      const { error: histErr } = await supabaseAdmin
-        .from("monthly_history")
-        .delete()
-        .or(`user_id.eq.${userId},user_id.is.null`)
-        .eq("year", year);
-      if (histErr) console.error(`[ClearYear] Erro ao deletar histórico de ${year}:`, histErr);
-    } else {
-      const { error: histErr } = await supabaseAdmin
-        .from("monthly_history")
-        .delete()
-        .eq("year", year);
-      if (histErr) console.error(`[ClearYear] Erro ao deletar histórico de ${year}:`, histErr);
-    }
+    const { error: histErr } = await context.supabase
+      .from("monthly_history")
+      .delete()
+      .eq("year", year);
+    if (histErr) throw histErr;
 
     return { success: true, year };
   });
