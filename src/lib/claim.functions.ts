@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import type { Database } from "@/integrations/supabase/types";
 
 export const DEFAULT_CATEGORY_SEEDS = [
   { name: "Moradia", kind: "expense", color: "#6366f1", icon: "home" },
@@ -25,18 +27,8 @@ export const DEFAULT_CATEGORY_SEEDS = [
   { name: "Outras entradas", kind: "income", color: "#84cc16", icon: "plus-circle" },
 ];
 
-type AuthenticatedClient = Parameters<
-  Parameters<typeof requireSupabaseAuth>[0]
->[0] extends never
-  ? never
-  : unknown;
-
 async function ensureDefaultCategoriesInDb(
-  supabase: {
-    from: (table: "categories") => ReturnType<
-      Parameters<Parameters<typeof requireSupabaseAuth>[0]>[0]
-    >;
-  },
+  supabase: SupabaseClient<Database>,
   userId: string,
 ) {
   const { data: dbCats, error: selectError } = await supabase.from("categories").select("*");
