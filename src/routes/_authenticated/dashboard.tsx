@@ -188,9 +188,9 @@ function Dashboard() {
       (monthHistory?.income ?? 0) +
       transactions.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
 
-    // Contas diretas em aberto que afetam o caixa do mês
+    // Todas as despesas em aberto do mês (Pix, Boleto, Débito, Dinheiro, Cartão manual e Faturas)
     const pending = transactions
-      .filter((t) => isDirectExpense(t) && !t.is_paid)
+      .filter((t) => t.kind === "expense" && !t.is_paid)
       .reduce((s, t) => s + t.amount, 0);
 
     // Saldo = Entradas - Gastos Diretos do mês (não desconta gastos no cartão de crédito)
@@ -544,7 +544,7 @@ function Dashboard() {
               value={totals.pending}
               icon={Clock3}
               tone="warning"
-              hint={`${transactions.filter((t) => isDirectExpense(t) && !t.is_paid).length} contas em aberto`}
+              hint={`${transactions.filter((t) => t.kind === "expense" && !t.is_paid).length} contas em aberto`}
             />
           </section>
 
