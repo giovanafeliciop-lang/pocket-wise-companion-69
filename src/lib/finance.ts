@@ -171,6 +171,7 @@ export async function fetchCategories(): Promise<Category[]> {
     { name: "Doações", kind: "expense", color: "#0d9488", icon: "hand-heart" },
     { name: "Juros", kind: "expense", color: "#e11d48", icon: "percent" },
     { name: "Viagem", kind: "expense", color: "#38bdf8", icon: "plane" },
+    { name: "Carro", kind: "expense", color: "#2563eb", icon: "wrench" },
   ];
 
   const missingDefaults = requiredDefaults.filter(
@@ -296,12 +297,38 @@ export async function resolveCategoryId(idOrName: string | null | undefined): Pr
     defaultColor = "#f59e0b";
     defaultIcon = "utensils";
   } else if (
+    upper.includes("OFICINA") ||
+    upper.includes("MECANIC") ||
+    upper.includes("PNEU") ||
+    upper.includes("BORRACH") ||
+    upper.includes("REVISAO") ||
+    upper.includes("AUTOPECA") ||
+    upper.includes("AUTO PECA") ||
+    upper.includes("AUTOCENTER") ||
+    upper.includes("LATARIA") ||
+    upper.includes("FUNILARIA") ||
+    upper.includes("ALINHAMENTO") ||
+    upper.includes("BALANCEAMENTO") ||
+    upper.includes("TROCA DE OLEO") ||
+    upper.includes("LAVA JATO") ||
+    upper.includes("LAVARAPIDO") ||
+    upper.includes("IPVA") ||
+    upper.includes("LICENCIAMENTO") ||
+    upper.includes("SEGURO AUTO")
+  ) {
+    searchName = "Carro";
+    defaultColor = "#2563eb";
+    defaultIcon = "wrench";
+  } else if (
     upper.includes("TRANSPORTE") ||
     upper.includes("UBER") ||
+    upper.includes("99APP") ||
     upper.includes("COMBUSTIVEL") ||
     upper.includes("GASOLINA") ||
-    upper.includes("CARRO") ||
-    upper.includes("POSTO")
+    upper.includes("POSTO") ||
+    upper.includes("PEDAGIO") ||
+    upper.includes("METRO") ||
+    upper.includes("ONIBUS")
   ) {
     searchName = "Transporte";
     defaultColor = "#0ea5e9";

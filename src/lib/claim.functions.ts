@@ -6,6 +6,7 @@ export const DEFAULT_CATEGORY_SEEDS = [
   { name: "Mercado", kind: "expense", color: "#10b981", icon: "shopping-cart" },
   { name: "Alimentação", kind: "expense", color: "#f59e0b", icon: "utensils" },
   { name: "Transporte", kind: "expense", color: "#0ea5e9", icon: "car" },
+  { name: "Carro", kind: "expense", color: "#2563eb", icon: "wrench" },
   { name: "Saúde", kind: "expense", color: "#ef4444", icon: "heart-pulse" },
   { name: "Educação", kind: "expense", color: "#8b5cf6", icon: "graduation-cap" },
   { name: "Lazer", kind: "expense", color: "#ec4899", icon: "party-popper" },
