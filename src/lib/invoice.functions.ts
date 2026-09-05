@@ -31,7 +31,7 @@ Regras:
 - Ignore pagamentos da fatura anterior, estornos e saldos/totais.
 - occurred_on: use a data da compra. Se o ano não aparecer, assuma o ano de ${today.slice(0, 4)}. Se a data for ilegível, use ${today}.
 - category deve ser exatamente uma destas: ${data.categories.join(", ")}.
-- Classificação: Gastos com combustível (gasolina, etanol, diesel, abastecimento, postos) e corridas (Uber, 99, táxi) devem ser categorizados como "Transporte". Gastos com oficina mecânica, conserto, pneus e peças do veículo devem ser "Carro".
+- Classificação: Gastos com combustível e abastecimento em postos (gasolina, etanol, diesel, auto posto, Shell, Ipiranga, Petrobras, etc.) devem ser categorizados como "Combustível". Corridas (Uber, 99, táxi), transporte público (metrô, ônibus) e pedágios devem ser "Transporte". Gastos com oficina mecânica, conserto, pneus e peças do veículo devem ser "Carro".
 - Não invente lançamentos que não estejam no documento.`;
 
     const content: Array<Record<string, unknown>> = [

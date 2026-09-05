@@ -171,6 +171,7 @@ export async function fetchCategories(): Promise<Category[]> {
     { name: "Doações", kind: "expense", color: "#0d9488", icon: "hand-heart" },
     { name: "Juros", kind: "expense", color: "#e11d48", icon: "percent" },
     { name: "Viagem", kind: "expense", color: "#38bdf8", icon: "plane" },
+    { name: "Combustível", kind: "expense", color: "#f97316", icon: "fuel" },
     { name: "Carro", kind: "expense", color: "#2563eb", icon: "wrench" },
   ];
 
@@ -304,6 +305,7 @@ export async function resolveCategoryId(idOrName: string | null | undefined): Pr
     defaultIcon = "utensils";
   } else if (
     upper.includes("COMBUSTIVEL") ||
+    upper.includes("COMBUSTIVEIS") ||
     upper.includes("GASOLINA") ||
     upper.includes("ETANOL") ||
     upper.includes("ALCOOL") ||
@@ -315,10 +317,17 @@ export async function resolveCategoryId(idOrName: string | null | undefined): Pr
     upper.includes("ABASTEC") ||
     upper.includes("IPIRANGA") ||
     upper.includes("PETROBRAS") ||
+    upper.includes("BR DISTRIBUIDORA") ||
+    upper.includes("VIBRA") ||
     upper.includes("SHELL") ||
     upper.includes("ALE COMBUSTIVEIS") ||
     upper.includes("BOXTER") ||
-    upper.includes("GRAAL") ||
+    upper.includes("GRAAL")
+  ) {
+    searchName = "Combustível";
+    defaultColor = "#f97316";
+    defaultIcon = "fuel";
+  } else if (
     upper.includes("TRANSPORTE") ||
     upper.includes("UBER") ||
     upper.includes("99APP") ||
