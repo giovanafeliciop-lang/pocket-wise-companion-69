@@ -2,27 +2,25 @@
 
 ## Causa confirmada
 
-Em `src/components/finance/YearOverview.tsx` (linhas 33–39), a lógica por mês é:
+Em `src/components/finance/YearOverview.tsx` (linhas 33–39), a lógica por mês alterna entre:
 
-```text
-Se o mês tem QUALQUER lançamento no app:
-   Gastos = soma apenas dos lançamentos do app
-   Entradas = soma apenas dos lançamentos do app
-Senão:
-   Gastos/Entradas = totais importados da planilha (monthly_history)
-```
+- Se o mês tem lançamentos no app → usa só os lançamentos do app.
+- Se não tem → usa os totais importados da planilha (`monthly_history`).
 
-Ou seja: nos meses que têm dados da planilha **e** pelo menos um lançamento manual, o gráfico descarta o valor da planilha e mostra só os lançamentos novos — por isso algumas colunas aparecem erradas (baixas demais). Confirmei que o histórico importado (`monthly_history`) nunca é alterado ao adicionar lançamentos, então somar os dois não gera contagem dupla.
+Como o usuário quer que o gráfico mostre **apenas os lançamentos feitos no app**, a coluna fica errada nos meses em que ainda há fallback para os dados importados.
 
 ## Mudança
 
-Em `YearOverview.tsx`, calcular por mês:
+Em `src/components/finance/YearOverview.tsx`:
 
-- `Gastos = gastos da planilha (se houver) + gastos dos lançamentos do app`
-- `Entradas = entradas da planilha (se houver) + entradas dos lançamentos do app`
+- Ignorar completamente `monthly_history` no cálculo do gráfico.
+- `Gastos` = soma das despesas lançadas no app para aquele mês.
+- `Entradas` = soma das receitas lançadas no app para aquele mês.
+- Meses sem lançamentos aparecerão com valor zero (sem fallback da planilha).
 
 Sem mudanças em banco de dados, layout ou outros componentes.
 
 ## Verificação
 
-- Conferir no painel que meses com dados mistos (planilha + app) passam a mostrar a soma correta e meses só com planilha ou só com app permanecem iguais.
+- Conferir no painel que o gráfico reflete apenas os lançamentos do app para o ano selecionado.
+
