@@ -637,7 +637,10 @@ export async function deleteInvoice(ids: string[]) {
 
 export function getNextMonthDate(dateStr?: string): string {
   const base = dateStr || new Date().toISOString().slice(0, 10);
-  const [y, m, d] = base.split("-").map(Number);
+  const [yRaw, mRaw, dRaw] = base.split("-").map(Number);
+  const y = yRaw ?? new Date().getFullYear();
+  const m = mRaw ?? 1;
+  const d = dRaw ?? 10;
   let nextY = y;
   let nextM = m + 1;
   if (nextM > 12) {
@@ -654,22 +657,23 @@ export type PayInvoiceParams = {
   isPartial: boolean;
   paidAmount: number;
   paymentMethod: string;
-  otherCardName?: string | null;
+  otherCardName?: string | null | undefined;
   paidAtDate: string; // YYYY-MM-DD
-  partialAction?: "keep_open" | "rollover_next_month";
-  rolloverDate?: string;
-  rolloverInterest?: number;
-  rolloverCategoryId?: string | null;
+  partialAction?: "keep_open" | "rollover_next_month" | undefined;
+  rolloverDate?: string | undefined;
+  rolloverInterest?: number | undefined;
+  rolloverCategoryId?: string | null | undefined;
 };
 
 export type RolloverInvoiceParams = {
   cardName: string;
   items: Transaction[];
   openAmount: number;
-  interestAmount?: number;
-  targetDate?: string; // YYYY-MM-DD
-  categoryId?: string | null;
+  interestAmount?: number | undefined;
+  targetDate?: string | undefined;
+  categoryId?: string | null | undefined;
 };
+
 
 export async function rolloverInvoiceDebt(params: RolloverInvoiceParams) {
   const { cardName, items, openAmount, interestAmount = 0, targetDate, categoryId } = params;
