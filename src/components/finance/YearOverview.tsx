@@ -12,7 +12,6 @@ import {
   brl,
   isDirectExpense,
   MONTH_NAMES,
-  type MonthlyHistory,
   type Transaction,
 } from "@/lib/finance";
 
