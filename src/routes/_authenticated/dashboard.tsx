@@ -468,7 +468,7 @@ function DashboardPage() {
 
           <section className="grid gap-4 lg:grid-cols-2">
             <CategoryBreakdown transactions={transactions} categories={categories} />
-            <YearOverview year={year} history={historyQuery.data ?? []} transactions={yearQuery.data ?? []} />
+            <YearOverview year={year} transactions={yearQuery.data ?? []} />
           </section>
 
           <section>
