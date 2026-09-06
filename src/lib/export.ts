@@ -101,3 +101,13 @@ export function exportYearToExcel(
 
   XLSX.writeFile(wb, `financas-${year}.xlsx`);
 }
+
+export function exportMonthToExcel(
+  year: number,
+  month: number,
+  transactions: Transaction[],
+  categories: Category[],
+  history?: MonthlyHistory,
+) {
+  exportYearToExcel(year, transactions, categories, history ? [history] : []);
+}

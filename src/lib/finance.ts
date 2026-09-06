@@ -637,7 +637,10 @@ export async function deleteInvoice(ids: string[]) {
 
 export function getNextMonthDate(dateStr?: string): string {
   const base = dateStr || new Date().toISOString().slice(0, 10);
-  const [y, m, d] = base.split("-").map(Number);
+  const [yRaw, mRaw, dRaw] = base.split("-").map(Number);
+  const y = yRaw ?? new Date().getFullYear();
+  const m = mRaw ?? 1;
+  const d = dRaw ?? 10;
   let nextY = y;
   let nextM = m + 1;
   if (nextM > 12) {
@@ -654,22 +657,23 @@ export type PayInvoiceParams = {
   isPartial: boolean;
   paidAmount: number;
   paymentMethod: string;
-  otherCardName?: string | null;
+  otherCardName?: string | null | undefined;
   paidAtDate: string; // YYYY-MM-DD
-  partialAction?: "keep_open" | "rollover_next_month";
-  rolloverDate?: string;
-  rolloverInterest?: number;
-  rolloverCategoryId?: string | null;
+  partialAction?: "keep_open" | "rollover_next_month" | undefined;
+  rolloverDate?: string | undefined;
+  rolloverInterest?: number | undefined;
+  rolloverCategoryId?: string | null | undefined;
 };
 
 export type RolloverInvoiceParams = {
   cardName: string;
   items: Transaction[];
   openAmount: number;
-  interestAmount?: number;
-  targetDate?: string; // YYYY-MM-DD
-  categoryId?: string | null;
+  interestAmount?: number | undefined;
+  targetDate?: string | undefined;
+  categoryId?: string | null | undefined;
 };
+
 
 export async function rolloverInvoiceDebt(params: RolloverInvoiceParams) {
   const { cardName, items, openAmount, interestAmount = 0, targetDate, categoryId } = params;
@@ -680,10 +684,14 @@ export async function rolloverInvoiceDebt(params: RolloverInvoiceParams) {
   if (!userId) throw new Error("Usuário não autenticado");
 
   const refDate = items[0]?.occurred_on || new Date().toISOString().slice(0, 10);
-  const [y, m] = refDate.split("-").map(Number);
+  const [yRaw, mRaw] = refDate.split("-").map(Number);
+  const y = yRaw ?? new Date().getFullYear();
+  const m = mRaw ?? 1;
   const nextDate = targetDate || getNextMonthDate(refDate);
-  const [tgtY, tgtM] = nextDate.split("-").map(Number);
+  const [tgtY, tgtMRaw] = nextDate.split("-").map(Number);
+  const tgtM = tgtMRaw ?? 1;
   const nextMonthName = MONTH_NAMES[tgtM - 1] ?? "Mês seguinte";
+
 
   // 1. Marca os itens pendentes da fatura atual como transferidos/liquidados por rolagem
   const unpaidItems = items.filter((i) => !i.is_paid);
@@ -858,7 +866,9 @@ export async function payInvoice(params: PayInvoiceParams) {
   const remainingDebt = Number((targetTotal - actualPaid).toFixed(2));
   if (isRollover && remainingDebt > 0 && userId) {
     const refDate = targetItems[0]?.occurred_on || paidAtDate;
-    const [y, m] = refDate.split("-").map(Number);
+    const [yRaw, mRaw] = refDate.split("-").map(Number);
+    const y = yRaw ?? new Date().getFullYear();
+    const m = mRaw ?? 1;
     const nextDate = rolloverDate || getNextMonthDate(refDate);
     const totalToTransfer = Number(
       (remainingDebt + (rolloverInterest > 0 ? rolloverInterest : 0)).toFixed(2),
@@ -872,13 +882,14 @@ export async function payInvoice(params: PayInvoiceParams) {
       occurred_on: nextDate,
       category_id: rolloverCategoryId ?? null,
       payment_method: "credito",
-      card_name: targetItems[0]?.card_name,
+      card_name: targetItems[0]?.card_name ?? null,
       source: "fatura",
       is_paid: false,
       notes:
         rolloverInterest > 0
           ? `Saldo transferido da fatura anterior (${brl(remainingDebt)} + ${brl(rolloverInterest)} de juros/encargos)`
           : `Saldo devedor transferido da fatura anterior (${MONTH_NAMES[m - 1]}/${y})`,
+
     });
   }
 }
