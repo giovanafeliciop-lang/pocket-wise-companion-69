@@ -684,10 +684,14 @@ export async function rolloverInvoiceDebt(params: RolloverInvoiceParams) {
   if (!userId) throw new Error("Usuário não autenticado");
 
   const refDate = items[0]?.occurred_on || new Date().toISOString().slice(0, 10);
-  const [y, m] = refDate.split("-").map(Number);
+  const [yRaw, mRaw] = refDate.split("-").map(Number);
+  const y = yRaw ?? new Date().getFullYear();
+  const m = mRaw ?? 1;
   const nextDate = targetDate || getNextMonthDate(refDate);
-  const [tgtY, tgtM] = nextDate.split("-").map(Number);
+  const [tgtY, tgtMRaw] = nextDate.split("-").map(Number);
+  const tgtM = tgtMRaw ?? 1;
   const nextMonthName = MONTH_NAMES[tgtM - 1] ?? "Mês seguinte";
+
 
   // 1. Marca os itens pendentes da fatura atual como transferidos/liquidados por rolagem
   const unpaidItems = items.filter((i) => !i.is_paid);
