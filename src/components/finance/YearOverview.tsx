@@ -12,31 +12,27 @@ import {
   brl,
   isDirectExpense,
   MONTH_NAMES,
-  type MonthlyHistory,
   type Transaction,
 } from "@/lib/finance";
 
 type Props = {
   year: number;
-  history: MonthlyHistory[];
   transactions: Transaction[];
 };
 
-export function YearOverview({ year, history, transactions }: Props) {
+export function YearOverview({ year, transactions }: Props) {
   const data = MONTH_NAMES.map((name, index) => {
     const monthNum = index + 1;
-    const base = history.find((h) => h.month === monthNum);
     const live = transactions.filter(
       (t) => Number(t.occurred_on.slice(5, 7)) === monthNum,
     );
 
-    const hasLive = live.length > 0;
-    const expenses = hasLive
-      ? live.filter(isDirectExpense).reduce((s, t) => s + t.amount, 0)
-      : (base?.expenses ?? 0);
-    const income = hasLive
-      ? live.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0)
-      : (base?.income ?? 0);
+    const expenses = live
+      .filter(isDirectExpense)
+      .reduce((s, t) => s + t.amount, 0);
+    const income = live
+      .filter((t) => t.kind === "income")
+      .reduce((s, t) => s + t.amount, 0);
     return { name: name.slice(0, 3), Gastos: expenses, Entradas: income };
   });
 
