@@ -75,6 +75,9 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 function DashboardPage() {
   const qc = useQueryClient();
+  const { user } = Route.useRouteContext();
+  const userEmail = user?.email ?? "";
+
   const now = new Date();
   const [year, setYear] = useState<number>(now.getFullYear());
   const [month, setMonth] = useState<number>(now.getMonth());
