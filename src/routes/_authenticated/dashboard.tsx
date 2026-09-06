@@ -409,7 +409,7 @@ function DashboardPage() {
       {activeTab === "month" ? (
         /* Aba de Visualização Mensal */
         <div key={`month-view-${year}-${month}`} className="mt-6 space-y-6">
-          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <StatCard
               label="Saldo do mês"
               value={totals.balance}
@@ -444,11 +444,22 @@ function DashboardPage() {
               }
             />
             <StatCard
+              label="Gastos no cartão"
+              value={totals.creditCardExpenses}
+              icon={CreditCard}
+              tone="indigo"
+              hint={
+                transactions.length === 0 && monthHistory
+                  ? "Histórico da planilha"
+                  : `${transactions.filter(isCreditCardExpense).length} compras no crédito`
+              }
+            />
+            <StatCard
               label="A pagar (em aberto)"
               value={transactions
                 .filter((t) => t.kind === "expense" && !t.is_paid)
                 .reduce((sum, t) => sum + t.amount, 0)}
-              icon={CreditCard}
+              icon={CalendarRange}
               tone="warning"
               hint={`${transactions.filter((t) => t.kind === "expense" && !t.is_paid).length} contas em aberto`}
             />
