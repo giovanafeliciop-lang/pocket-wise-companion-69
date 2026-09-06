@@ -866,7 +866,9 @@ export async function payInvoice(params: PayInvoiceParams) {
   const remainingDebt = Number((targetTotal - actualPaid).toFixed(2));
   if (isRollover && remainingDebt > 0 && userId) {
     const refDate = targetItems[0]?.occurred_on || paidAtDate;
-    const [y, m] = refDate.split("-").map(Number);
+    const [yRaw, mRaw] = refDate.split("-").map(Number);
+    const y = yRaw ?? new Date().getFullYear();
+    const m = mRaw ?? 1;
     const nextDate = rolloverDate || getNextMonthDate(refDate);
     const totalToTransfer = Number(
       (remainingDebt + (rolloverInterest > 0 ? rolloverInterest : 0)).toFixed(2),
@@ -880,13 +882,14 @@ export async function payInvoice(params: PayInvoiceParams) {
       occurred_on: nextDate,
       category_id: rolloverCategoryId ?? null,
       payment_method: "credito",
-      card_name: targetItems[0]?.card_name,
+      card_name: targetItems[0]?.card_name ?? null,
       source: "fatura",
       is_paid: false,
       notes:
         rolloverInterest > 0
           ? `Saldo transferido da fatura anterior (${brl(remainingDebt)} + ${brl(rolloverInterest)} de juros/encargos)`
           : `Saldo devedor transferido da fatura anterior (${MONTH_NAMES[m - 1]}/${y})`,
+
     });
   }
 }
