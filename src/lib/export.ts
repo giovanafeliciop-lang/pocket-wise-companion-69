@@ -6,6 +6,7 @@ import {
   type Category,
   type MonthlyHistory,
   type Transaction,
+  isDirectExpense,
 } from "@/lib/finance";
 
 const paymentLabel = (value: string) =>
@@ -75,16 +76,19 @@ export function exportYearToExcel(
     .sort((a, b) => a.month - b.month)
     .map((h) => {
       const monthTx = transactions.filter((t) => Number(t.occurred_on.slice(5, 7)) === h.month);
-      const extraExp = monthTx.filter((t) => t.kind === "expense").reduce((s, t) => s + t.amount, 0);
-      const extraInc = monthTx.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
-      const expenses = h.expenses + extraExp;
-      const income = h.income + extraInc;
+      const hasLive = monthTx.length > 0;
+      const expenses = hasLive
+        ? monthTx.filter(isDirectExpense).reduce((s, t) => s + t.amount, 0)
+        : h.expenses;
+      const income = hasLive
+        ? monthTx.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0)
+        : h.income;
       return {
         Mês: MONTH_NAMES[h.month - 1],
         "Entradas (R$)": Number(income.toFixed(2)),
         "Gastos (R$)": Number(expenses.toFixed(2)),
         "Saldo (R$)": Number((income - expenses).toFixed(2)),
-        Origem: h.expenses || h.income ? "Planilha + lançamentos" : "Lançamentos",
+        Origem: hasLive ? "Lançamentos no app" : "Planilha",
       };
     });
   const wsHist = XLSX.utils.json_to_sheet(

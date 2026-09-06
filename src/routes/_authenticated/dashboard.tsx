@@ -179,13 +179,18 @@ function Dashboard() {
       .filter(isCreditCardExpense)
       .reduce((s, t) => s + t.amount, 0);
 
+    // Se o mês possui lançamentos no app, usa os lançamentos reais; senão, usa o histórico da planilha
+    const hasTransactions = transactions.length > 0;
+    const baseExpenses = hasTransactions ? 0 : (monthHistory?.expenses ?? 0);
+    const baseIncome = hasTransactions ? 0 : (monthHistory?.income ?? 0);
+
     // Gastos diretos do mês (Pix, Dinheiro, Débito, Boleto, Faturas pagas à vista/débito/pix)
     const expenses =
-      (monthHistory?.expenses ?? 0) +
+      baseExpenses +
       transactions.filter(isDirectExpense).reduce((s, t) => s + t.amount, 0);
 
     const income =
-      (monthHistory?.income ?? 0) +
+      baseIncome +
       transactions.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
 
     // Todas as despesas em aberto do mês (Pix, Boleto, Débito, Dinheiro, Cartão manual e Faturas)
@@ -515,7 +520,7 @@ function Dashboard() {
               value={totals.income}
               icon={TrendingUp}
               tone="primary"
-              {...(monthHistory ? { hint: "Inclui histórico da planilha" } : {})}
+              {...(monthHistory && transactions.length === 0 ? { hint: "Histórico da planilha" } : {})}
             />
             <StatCard
               label="Gastos do mês"

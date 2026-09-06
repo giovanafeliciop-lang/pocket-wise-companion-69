@@ -82,18 +82,19 @@ export function AnnualSummaryView({
       const monthTxs = transactions.filter(
         (t) => Number(t.occurred_on.slice(5, 7)) === monthNum,
       );
+      const hasLive = monthTxs.length > 0;
 
-      const expenses =
-        (base?.expenses ?? 0) +
-        monthTxs.filter(isDirectExpense).reduce((s, t) => s + t.amount, 0);
+      const expenses = hasLive
+        ? monthTxs.filter(isDirectExpense).reduce((s, t) => s + t.amount, 0)
+        : (base?.expenses ?? 0);
 
       const creditCardExpenses = monthTxs
         .filter(isCreditCardExpense)
         .reduce((s, t) => s + t.amount, 0);
 
-      const income =
-        (base?.income ?? 0) +
-        monthTxs.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
+      const income = hasLive
+        ? monthTxs.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0)
+        : (base?.income ?? 0);
 
       const balance = income - expenses;
       runningBalance += balance;
@@ -172,18 +173,26 @@ export function AnnualSummaryView({
         (t) => t.occurred_on.startsWith(String(y)),
       );
 
-      const histIncome = yearHistory.reduce((acc, h) => acc + (h.income ?? 0), 0);
-      const histExpenses = yearHistory.reduce((acc, h) => acc + (h.expenses ?? 0), 0);
+      let totalIncome = 0;
+      let totalExpenses = 0;
 
-      const txIncome = yearTxs
-        .filter((t) => t.kind === "income")
-        .reduce((acc, t) => acc + t.amount, 0);
-      const txExpenses = yearTxs
-        .filter(isDirectExpense)
-        .reduce((acc, t) => acc + t.amount, 0);
+      for (let m = 1; m <= 12; m++) {
+        const monthTx = yearTxs.filter((t) => Number(t.occurred_on.slice(5, 7)) === m);
+        const base = yearHistory.find((h) => h.month === m);
+        const hasLive = monthTx.length > 0;
 
-      const totalIncome = histIncome + txIncome;
-      const totalExpenses = histExpenses + txExpenses;
+        const mIncome = hasLive
+          ? monthTx.filter((t) => t.kind === "income").reduce((acc, t) => acc + t.amount, 0)
+          : (base?.income ?? 0);
+
+        const mExpenses = hasLive
+          ? monthTx.filter(isDirectExpense).reduce((acc, t) => acc + t.amount, 0)
+          : (base?.expenses ?? 0);
+
+        totalIncome += mIncome;
+        totalExpenses += mExpenses;
+      }
+
       const balance = totalIncome - totalExpenses;
 
       return {
@@ -453,27 +462,29 @@ export function AnnualSummaryView({
                   </td>
                   <td
                     className={`px-4 py-3 text-right numeric font-semibold ${
-                      m.balance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+                      m.balance >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-rose-600 dark:text-rose-400"
                     }`}
                   >
                     {`${m.balance >= 0 ? "+" : ""}${brl(m.balance)}`}
                   </td>
                   <td
-                    className={`px-4 py-3 text-right numeric font-medium text-muted-foreground ${
-                      m.runningBalance >= 0 ? "text-emerald-600/80" : "text-rose-600/80"
+                    className={`px-4 py-3 text-right numeric font-semibold ${
+                      m.runningBalance >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-rose-600 dark:text-rose-400"
                     }`}
                   >
-                    {brl(m.runningBalance)}
+                    {`${m.runningBalance >= 0 ? "+" : ""}${brl(m.runningBalance)}`}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <Button
+                      type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-7 text-xs gap-1"
-                      onClick={() => {
-                        onSelectMonth(m.monthIndex);
-                        onNavigateToMonth(year, m.monthIndex);
-                      }}
+                      className="h-7 text-xs gap-1 text-primary hover:text-primary hover:bg-primary/10"
+                      onClick={() => onNavigateToMonth(year, m.monthIndex)}
                     >
                       <span>Ver mês</span>
                       <ExternalLink className="h-3 w-3" />
@@ -482,55 +493,27 @@ export function AnnualSummaryView({
                 </tr>
               ))}
             </tbody>
-            <tfoot className="bg-secondary/60 font-bold border-t-2 border-border text-foreground">
-              <tr>
-                <td className="px-4 py-3 text-sm">TOTAL DO ANO ({year})</td>
-                <td className="px-4 py-3 text-right numeric text-primary">
-                  {brl(totals.totalIncome)}
-                </td>
-                <td className="px-4 py-3 text-right numeric text-foreground">
-                  {brl(totals.totalExpenses)}
-                </td>
-                <td
-                  className={`px-4 py-3 text-right numeric text-base ${
-                    totals.netBalance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-                  }`}
-                >
-                  {`${totals.netBalance >= 0 ? "+" : ""}${brl(totals.netBalance)}`}
-                </td>
-                <td
-                  className={`px-4 py-3 text-right numeric ${
-                    totals.netBalance >= 0 ? "text-emerald-600" : "text-rose-600"
-                  }`}
-                >
-                  {brl(totals.netBalance)}
-                </td>
-                <td className="px-4 py-3 text-center text-xs text-muted-foreground">12 meses</td>
-              </tr>
-            </tfoot>
           </table>
         </div>
       </section>
 
-      {/* Gastos por Categoria no Ano Inteiro & Comparativo Anual */}
+      {/* Gráfico de Categorias no Ano & Comparativo Anos */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Gastos por Categoria no Ano */}
+        {/* Gastos por Categoria Anual */}
         <section className="surface-card p-5 space-y-4">
           <div>
-            <h3 className="font-display text-lg font-semibold">
-              Gastos por Categoria em {year}
-            </h3>
+            <h3 className="font-display text-lg font-semibold">Distribuição por Categoria ({year})</h3>
             <p className="text-xs text-muted-foreground">
-              Distribuição acumulada de todas as despesas no ano
+              Participação de cada categoria no acumulado do ano
             </p>
           </div>
 
           {categoryTotals.list.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
-              <p>Nenhuma despesa registrada para este ano ainda.</p>
+              Nenhuma despesa detalhada registrada em {year}.
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2 items-center">
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -538,13 +521,13 @@ export function AnnualSummaryView({
                       data={categoryTotals.list}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={48}
+                      innerRadius={45}
                       outerRadius={75}
                       paddingAngle={2}
                       stroke="none"
                     >
-                      {categoryTotals.list.map((d, i) => (
-                        <Cell key={`annual-cell-${d.name}-${i}`} fill={d.color} />
+                      {categoryTotals.list.map((d) => (
+                        <Cell key={`annual-pie-${d.id}`} fill={d.color} />
                       ))}
                     </Pie>
                     <Tooltip

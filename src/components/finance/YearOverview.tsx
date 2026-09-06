@@ -24,17 +24,19 @@ type Props = {
 
 export function YearOverview({ year, history, transactions }: Props) {
   const data = MONTH_NAMES.map((name, index) => {
-    const base = history.find((h) => h.month === index + 1);
+    const monthNum = index + 1;
+    const base = history.find((h) => h.month === monthNum);
     const live = transactions.filter(
-      (t) => Number(t.occurred_on.slice(5, 7)) === index + 1,
+      (t) => Number(t.occurred_on.slice(5, 7)) === monthNum,
     );
 
-    const expenses =
-      (base?.expenses ?? 0) +
-      live.filter(isDirectExpense).reduce((s, t) => s + t.amount, 0);
-    const income =
-      (base?.income ?? 0) +
-      live.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
+    const hasLive = live.length > 0;
+    const expenses = hasLive
+      ? live.filter(isDirectExpense).reduce((s, t) => s + t.amount, 0)
+      : (base?.expenses ?? 0);
+    const income = hasLive
+      ? live.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0)
+      : (base?.income ?? 0);
     return { name: name.slice(0, 3), Gastos: expenses, Entradas: income };
   });
 
