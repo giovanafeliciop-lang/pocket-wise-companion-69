@@ -540,8 +540,10 @@ function DashboardPage() {
         open={importOpen}
         onOpenChange={setImportOpen}
         categories={categories}
-        onImportSuccess={(card, count, firstDate) => {
+        onConfirm={async (rows) => {
+          await createTransactions(rows);
           invalidate();
+          const firstDate = rows[0]?.occurred_on;
           if (firstDate) {
             const [y, m] = firstDate.split("-").map(Number);
             if (y && m) {
@@ -555,11 +557,11 @@ function DashboardPage() {
       <EmailNotificationDialog
         open={emailOpen}
         onOpenChange={setEmailOpen}
+        userEmail={userEmail}
         transactions={transactions}
         categories={categories}
-        year={year}
-        month={month}
       />
+
     </div>
   );
 }
