@@ -408,10 +408,10 @@ function DashboardPage() {
         <div key={`month-view-${year}-${month}`} className="mt-6 space-y-6">
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
-              title="Saldo do mês"
-              value={brl(totals.balance)}
+              label="Saldo do mês"
+              value={totals.balance}
               icon={Wallet}
-              tone={totals.balance >= 0 ? "success" : "danger"}
+              tone={totals.balance >= 0 ? "primary" : "danger"}
               hint={
                 totals.balance >= 0
                   ? "Resultado positivo no período"
@@ -419,10 +419,10 @@ function DashboardPage() {
               }
             />
             <StatCard
-              title="Entradas do mês"
-              value={brl(totals.income)}
+              label="Entradas do mês"
+              value={totals.income}
               icon={TrendingUp}
-              tone="success"
+              tone="primary"
               hint={
                 transactions.length === 0 && monthHistory
                   ? "Histórico da planilha"
@@ -430,10 +430,10 @@ function DashboardPage() {
               }
             />
             <StatCard
-              title="Gastos pagos / à vista"
-              value={brl(totals.expenses)}
+              label="Gastos pagos / à vista"
+              value={totals.expenses}
               icon={TrendingDown}
-              tone="default"
+              tone="neutral"
               hint={
                 transactions.length === 0 && monthHistory
                   ? "Histórico da planilha"
@@ -441,17 +441,16 @@ function DashboardPage() {
               }
             />
             <StatCard
-              title="A pagar (em aberto)"
-              value={brl(
-                transactions
-                  .filter((t) => t.kind === "expense" && !t.is_paid)
-                  .reduce((sum, t) => sum + t.amount, 0),
-              )}
+              label="A pagar (em aberto)"
+              value={transactions
+                .filter((t) => t.kind === "expense" && !t.is_paid)
+                .reduce((sum, t) => sum + t.amount, 0)}
               icon={CreditCard}
               tone="warning"
               hint={`${transactions.filter((t) => t.kind === "expense" && !t.is_paid).length} contas em aberto`}
             />
           </section>
+
 
           <section className="grid gap-4 lg:grid-cols-2">
             <CategoryBreakdown transactions={transactions} categories={categories} />
