@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowDownRight,
+  ArrowRight,
   ArrowUpRight,
   Check,
   ChevronDown,
@@ -37,9 +38,11 @@ import {
   formatDate,
   type Category,
   type PayInvoiceParams,
+  type RolloverInvoiceParams,
   type Transaction,
 } from "@/lib/finance";
 import { PayInvoiceDialog } from "@/components/finance/PayInvoiceDialog";
+import { RolloverInvoiceDialog } from "@/components/finance/RolloverInvoiceDialog";
 
 type Props = {
   transactions: Transaction[];
@@ -47,6 +50,7 @@ type Props = {
   onTogglePaid: (t: Transaction) => void;
   onToggleBatchPaid?: (ids: string[], isPaid: boolean) => void;
   onPayInvoice?: (params: PayInvoiceParams) => Promise<void>;
+  onRolloverInvoice?: (params: RolloverInvoiceParams) => Promise<void>;
   onDeleteInvoice?: (cardName: string, items: Transaction[]) => Promise<void> | void;
   onEdit: (t: Transaction) => void;
   onDelete: (t: Transaction) => void;
@@ -103,6 +107,7 @@ export function TransactionList({
   onTogglePaid,
   onToggleBatchPaid,
   onPayInvoice,
+  onRolloverInvoice,
   onDeleteInvoice,
   onEdit,
   onDelete,
@@ -113,6 +118,11 @@ export function TransactionList({
   const [payDialogInvoice, setPayDialogInvoice] = useState<{
     cardName: string;
     items: Transaction[];
+  } | null>(null);
+  const [rolloverDialogInvoice, setRolloverDialogInvoice] = useState<{
+    cardName: string;
+    items: Transaction[];
+    openAmount: number;
   } | null>(null);
   const [deleteInvoiceConfirm, setDeleteInvoiceConfirm] = useState<{
     cardName: string;
@@ -441,25 +451,61 @@ export function TransactionList({
                             </Button>
                             <Button
                               type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs gap-1 border-amber-500/60 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                              onClick={() =>
+                                setRolloverDialogInvoice({
+                                  cardName,
+                                  items,
+                                  openAmount: openTotal,
+                                })
+                              }
+                              title="Transferir o saldo devedor restante para a fatura do mês seguinte"
+                            >
+                              <ArrowRight className="h-3 w-3" />
+                              <span>Fatura seguinte</span>
+                            </Button>
+                            <Button
+                              type="button"
                               variant="default"
                               size="sm"
-                              className="h-7 text-xs gap-1 bg-amber-600 hover:bg-amber-700 text-white"
+                              className="h-7 text-xs gap-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold"
                               onClick={() => setPayDialogInvoice({ cardName, items })}
                             >
                               <Check className="h-3 w-3" />
-                              {`Pagar / Ajustar (${brl(openTotal)})`}
+                              {`Pagar restante (${brl(openTotal)})`}
                             </Button>
                           </>
                         ) : (
-                          <Button
-                            type="button"
-                            variant="default"
-                            size="sm"
-                            className="h-7 text-xs gap-1"
-                            onClick={() => setPayDialogInvoice({ cardName, items })}
-                          >
-                            <Check className="h-3.5 w-3.5" /> Pagar fatura
-                          </Button>
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                              onClick={() =>
+                                setRolloverDialogInvoice({
+                                  cardName,
+                                  items,
+                                  openAmount: total,
+                                })
+                              }
+                              title="Transferir esta fatura para a fatura do mês seguinte"
+                            >
+                              <ArrowRight className="h-3 w-3" />
+                              <span>Fatura seguinte</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="default"
+                              size="sm"
+                              className="h-7 text-xs gap-1"
+                              onClick={() => setPayDialogInvoice({ cardName, items })}
+                            >
+                              <Check className="h-3.5 w-3.5" /> Pagar fatura
+                            </Button>
+                          </>
                         )}
                       </div>
                     </div>
@@ -529,22 +575,12 @@ export function TransactionList({
                                     className={cn(
                                       "numeric font-semibold",
                                       item.is_paid
-                                        ? "text-muted-foreground line-through"
+                                        ? "line-through text-muted-foreground"
                                         : "text-foreground",
                                     )}
                                   >
                                     {brl(item.amount)}
                                   </span>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0 opacity-60 hover:opacity-100"
-                                    title="Excluir este lançamento da fatura"
-                                    onClick={() => onDelete(item)}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
                                 </div>
                               </div>
                             );
@@ -560,56 +596,70 @@ export function TransactionList({
         </div>
       ) : null}
 
-      {/* Controles de Busca e Filtro */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold">Lançamentos do mês</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div className="flex flex-wrap items-center gap-2">
           <Input
-            placeholder="Buscar lançamento..."
+            placeholder="Buscar lançamentos..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-9 w-48 text-xs"
+            className="h-9 w-60 text-xs"
           />
+
           <Select value={filter} onValueChange={setFilter}>
-            <SelectTrigger className="h-9 w-36 text-xs">
+            <SelectTrigger className="h-9 w-40 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="open">Em aberto</SelectItem>
-              <SelectItem value="paid">Pagos</SelectItem>
-              <SelectItem value="expense">Despesas</SelectItem>
-              <SelectItem value="income">Entradas</SelectItem>
-              {cardInvoices.map((c) => (
-                <SelectItem key={c.cardName} value={`card:${c.cardName}`}>
-                  {`Fatura ${c.cardName}`}
+              <SelectItem value="all" className="text-xs">
+                Todos
+              </SelectItem>
+              <SelectItem value="open" className="text-xs">
+                Em aberto
+              </SelectItem>
+              <SelectItem value="paid" className="text-xs">
+                Pagos
+              </SelectItem>
+              <SelectItem value="expense" className="text-xs">
+                Somente despesas
+              </SelectItem>
+              <SelectItem value="income" className="text-xs">
+                Somente receitas
+              </SelectItem>
+              {CREDIT_CARDS.map((card) => (
+                <SelectItem key={card} value={`card:${card}`} className="text-xs">
+                  {`Cartão ${card}`}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
+
+        <span className="text-xs text-muted-foreground">
+          {`${displayList.length} ${displayList.length === 1 ? "registro" : "registros"}`}
+        </span>
       </div>
 
-      {/* Lista de Transações e Resumos de Faturas */}
-      <div className="mt-4 space-y-2">
+      <div className="divide-y divide-border/60">
         {displayList.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
-            <p>Nenhum lançamento encontrado para este filtro.</p>
-          </div>
+          <p className="py-12 text-center text-xs text-muted-foreground">
+            Nenhum lançamento encontrado para este período.
+          </p>
         ) : null}
 
         {displayList.map((item) => {
           if (item.type === "invoice_summary") {
-            const isInvoiceOpen = !item.isAllPaid;
             const paymentDetails = getInvoicePaymentDetails(item.items);
+            const isInvoiceOpen = !item.isAllPaid;
             return (
               <div
-                key={`invoice-summary-${item.cardName}`}
+                key={`invoice-${item.cardName}`}
                 className={cn(
-                  "group flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors",
-                  item.isAllPaid
-                    ? "border-emerald-500/30 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.08]"
-                    : "border-amber-500/60 bg-amber-500/15 text-foreground hover:bg-amber-500/25 shadow-xs shadow-amber-500/5",
+                  "group flex items-center gap-3 py-3 transition-colors hover:bg-secondary/20 -mx-2 px-2 rounded-lg",
+                  item.isPartiallyPaid
+                    ? "bg-amber-500/[0.04] border-l-2 border-amber-500 pl-2"
+                    : item.isAllPaid
+                      ? "opacity-80"
+                      : "",
                 )}
               >
                 <button
@@ -717,17 +767,36 @@ export function TransactionList({
                     <span>Ver itens</span>
                   </Button>
                   {isInvoiceOpen ? (
-                    <Button
-                      variant={item.isPartiallyPaid ? "outline" : "default"}
-                      size="sm"
-                      className="h-7 text-xs gap-1 bg-amber-600 hover:bg-amber-700 text-white"
-                      onClick={() =>
-                        setPayDialogInvoice({ cardName: item.cardName, items: item.items })
-                      }
-                    >
-                      <Check className="h-3 w-3" />
-                      <span>Pagar</span>
-                    </Button>
+                    <>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs gap-1 text-muted-foreground hover:text-amber-700 dark:hover:text-amber-300 hover:bg-amber-500/10 px-2"
+                        onClick={() =>
+                          setRolloverDialogInvoice({
+                            cardName: item.cardName,
+                            items: item.items,
+                            openAmount: item.openTotal,
+                          })
+                        }
+                        title="Transferir saldo devedor para a fatura do mês seguinte"
+                      >
+                        <ArrowRight className="h-3 w-3" />
+                        <span className="hidden sm:inline">Fatura seguinte</span>
+                      </Button>
+                      <Button
+                        variant={item.isPartiallyPaid ? "outline" : "default"}
+                        size="sm"
+                        className="h-7 text-xs gap-1 bg-amber-600 hover:bg-amber-700 text-white"
+                        onClick={() =>
+                          setPayDialogInvoice({ cardName: item.cardName, items: item.items })
+                        }
+                      >
+                        <Check className="h-3 w-3" />
+                        <span>{item.isPartiallyPaid ? "Pagar restante" : "Pagar"}</span>
+                      </Button>
+                    </>
                   ) : null}
                   <Button
                     variant="ghost"
@@ -749,16 +818,13 @@ export function TransactionList({
           const cat = categories.find((c) => c.id === t.category_id);
           const method = PAYMENT_METHODS.find((p) => p.value === t.payment_method)?.label;
           const income = t.kind === "income";
-          const isOpenExpense = !t.is_paid && t.kind === "expense";
 
           return (
             <div
               key={t.id}
               className={cn(
-                "group flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors",
-                isOpenExpense
-                  ? "border-amber-500/60 bg-amber-500/15 text-foreground hover:bg-amber-500/25 shadow-xs shadow-amber-500/5"
-                  : "border-border bg-secondary/30 hover:bg-secondary/60",
+                "group flex items-center gap-3 py-3 transition-colors hover:bg-secondary/20 -mx-2 px-2 rounded-lg",
+                t.is_paid && !income ? "opacity-60" : "",
               )}
             >
               <button
@@ -769,44 +835,44 @@ export function TransactionList({
                   "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors",
                   t.is_paid
                     ? "border-primary bg-primary text-primary-foreground"
-                    : isOpenExpense
-                      ? "border-amber-500/80 bg-amber-500/20 text-amber-700 dark:text-amber-300 hover:bg-amber-500 hover:text-white"
-                      : "border-border text-muted-foreground hover:border-primary",
+                    : "border-border bg-card hover:border-primary",
                 )}
               >
                 {t.is_paid ? (
                   <Check className="h-4 w-4" />
                 ) : income ? (
-                  <ArrowUpRight className="h-4 w-4" />
+                  <ArrowUpRight className="h-4 w-4 text-emerald-500" />
                 ) : (
-                  <ArrowDownRight className="h-4 w-4" />
+                  <ArrowDownRight className="h-4 w-4 text-rose-500" />
                 )}
               </button>
 
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{t.description}</p>
-                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  <span>{formatDate(t.occurred_on)}</span>
+                <div className="flex items-center gap-2">
+                  <p
+                    className={cn(
+                      "truncate text-sm font-medium",
+                      t.is_paid && !income ? "line-through text-muted-foreground" : "text-foreground",
+                    )}
+                  >
+                    {t.description}
+                  </p>
                   {cat ? (
                     <Badge
                       variant="outline"
                       style={{ borderColor: cat.color, color: cat.color }}
-                      className="px-1.5 py-0 text-[10px]"
+                      className="text-[10px] px-1.5 py-0 h-4 shrink-0 font-medium"
                     >
                       {cat.name}
                     </Badge>
                   ) : null}
-                  <span>
-                    {`· ${method ?? ""}${t.card_name ? ` (${t.card_name})` : ""}`}
-                  </span>
-                  {t.notes ? <span>{`· ${t.notes}`}</span> : null}
-                  {isOpenExpense ? (
-                    <Badge
-                      variant="outline"
-                      className="border-amber-500/80 bg-amber-500/20 text-amber-800 dark:text-amber-200 px-1.5 py-0 text-[10px] font-semibold"
-                    >
-                      Em aberto
-                    </Badge>
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                  <span>{formatDate(t.occurred_on)}</span>
+                  {method ? <span>· {method}</span> : null}
+                  {t.card_name ? <span>· {t.card_name}</span> : null}
+                  {!t.is_paid && !income ? (
+                    <span className="text-warning">· em aberto</span>
                   ) : !t.is_paid ? (
                     <span className="text-warning">· a receber</span>
                   ) : null}
@@ -842,9 +908,26 @@ export function TransactionList({
         }}
         cardName={payDialogInvoice?.cardName ?? ""}
         items={payDialogInvoice?.items ?? []}
+        categories={categories}
         onConfirm={async (params) => {
           if (onPayInvoice) {
             await onPayInvoice(params);
+          }
+        }}
+      />
+
+      <RolloverInvoiceDialog
+        open={Boolean(rolloverDialogInvoice)}
+        onOpenChange={(open) => {
+          if (!open) setRolloverDialogInvoice(null);
+        }}
+        cardName={rolloverDialogInvoice?.cardName ?? ""}
+        items={rolloverDialogInvoice?.items ?? []}
+        openAmount={rolloverDialogInvoice?.openAmount ?? 0}
+        categories={categories}
+        onConfirm={async (params) => {
+          if (onRolloverInvoice) {
+            await onRolloverInvoice(params);
           }
         }}
       />
@@ -868,18 +951,11 @@ export function TransactionList({
                 <strong className="text-foreground">
                   {deleteInvoiceConfirm?.items.length ?? 0} lançamentos
                 </strong>
-                {` vinculados à fatura do cartão `}
-                <strong className="text-foreground">{deleteInvoiceConfirm?.cardName}</strong>
-                {` neste mês (totalizando `}
-                <strong className="text-foreground">
-                  {brl(
-                    deleteInvoiceConfirm?.items.reduce((s, i) => s + i.amount, 0) ?? 0,
-                  )}
-                </strong>
-                {`).`}
+                {` vinculados a esta fatura importada do cartão `}
+                <strong className="text-foreground">{deleteInvoiceConfirm?.cardName}</strong>.
               </p>
-              <p>
-                Isso removerá todos os lançamentos desta fatura para que você possa corrigir os dados e importá-la novamente.
+              <p className="text-xs text-muted-foreground/90">
+                Esta ação removerá todas as despesas detalhadas importadas e não poderá ser desfeita. Você poderá importar a fatura novamente caso deseje.
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -889,10 +965,7 @@ export function TransactionList({
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={async () => {
                 if (deleteInvoiceConfirm && onDeleteInvoice) {
-                  await onDeleteInvoice(
-                    deleteInvoiceConfirm.cardName,
-                    deleteInvoiceConfirm.items,
-                  );
+                  await onDeleteInvoice(deleteInvoiceConfirm.cardName, deleteInvoiceConfirm.items);
                   setDeleteInvoiceConfirm(null);
                 }
               }}

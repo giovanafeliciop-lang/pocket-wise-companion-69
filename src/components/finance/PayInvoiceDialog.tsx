@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   Banknote,
   Calendar,
   Check,
   CreditCard,
+  Percent,
   QrCode,
   Receipt,
   Wallet,
@@ -30,7 +32,10 @@ import {
 } from "@/components/ui/select";
 import {
   CREDIT_CARDS,
+  MONTH_NAMES,
   brl,
+  getNextMonthDate,
+  type Category,
   type PayInvoiceParams,
   type Transaction,
 } from "@/lib/finance";
@@ -40,6 +45,7 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   cardName: string;
   items: Transaction[];
+  categories?: Category[];
   onConfirm: (params: PayInvoiceParams) => Promise<void>;
 };
 
@@ -48,22 +54,41 @@ export function PayInvoiceDialog({
   onOpenChange,
   cardName,
   items,
+  categories = [],
   onConfirm,
 }: Props) {
   const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
+  const paidAmountSoFar = items
+    .filter((i) => i.is_paid)
+    .reduce((sum, item) => sum + item.amount, 0);
   const openAmount = items
     .filter((i) => !i.is_paid)
     .reduce((sum, item) => sum + item.amount, 0);
 
+  const isAlreadyPartiallyPaid = paidAmountSoFar > 0 && openAmount > 0;
   const defaultPaymentTarget = openAmount > 0 ? openAmount : totalAmount;
 
   const todayStr = new Date().toISOString().slice(0, 10);
+  const refDate = items[0]?.occurred_on || todayStr;
+  const defaultNextDate = getNextMonthDate(refDate);
+
   const [paymentMethod, setPaymentMethod] = useState<string>("pix");
   const [otherCardName, setOtherCardName] = useState<string>("");
   const [paymentDate, setPaymentDate] = useState<string>(todayStr);
   const [isPartial, setIsPartial] = useState<boolean>(false);
   const [paidAmountStr, setPaidAmountStr] = useState<string>("");
+  const [partialAction, setPartialAction] = useState<"keep_open" | "rollover_next_month">("keep_open");
+  const [rolloverDate, setRolloverDate] = useState<string>(defaultNextDate);
+  const [rolloverInterestStr, setRolloverInterestStr] = useState<string>("");
+  const [rolloverCategoryId, setRolloverCategoryId] = useState<string>("");
   const [submitting, setSubmitting] = useState<boolean>(false);
+
+  const expenseCategories = categories.filter((c) => c.kind === "expense");
+  const jurosCategory = expenseCategories.find(
+    (c) =>
+      c.name.toLowerCase().includes("juros") ||
+      c.name.toLowerCase().includes("encargo"),
+  );
 
   useEffect(() => {
     if (open) {
@@ -72,12 +97,20 @@ export function PayInvoiceDialog({
       setPaymentDate(todayStr);
       setIsPartial(false);
       setPaidAmountStr(defaultPaymentTarget.toFixed(2));
+      setPartialAction("keep_open");
+      setRolloverDate(getNextMonthDate(refDate));
+      setRolloverInterestStr("");
+      setRolloverCategoryId(jurosCategory?.id ?? expenseCategories[0]?.id ?? "");
       setSubmitting(false);
     }
-  }, [open, defaultPaymentTarget, todayStr]);
+  }, [open, defaultPaymentTarget, todayStr, refDate, jurosCategory?.id, expenseCategories]);
 
   const parsedPaidAmount = Number(paidAmountStr.replace(",", ".")) || 0;
   const remainingDebt = Math.max(0, defaultPaymentTarget - parsedPaidAmount);
+  const parsedInterest = Number(rolloverInterestStr.replace(",", ".")) || 0;
+
+  const [tgtY, tgtM] = (rolloverDate || defaultNextDate).split("-").map(Number);
+  const nextMonthName = MONTH_NAMES[(tgtM || 1) - 1] ?? "Próximo mês";
 
   const handleQuickPercent = (percent: number) => {
     const val = (defaultPaymentTarget * percent).toFixed(2);
@@ -102,6 +135,14 @@ export function PayInvoiceDialog({
         paymentMethod,
         otherCardName: paymentMethod === "credito" ? otherCardName : null,
         paidAtDate: paymentDate || todayStr,
+        partialAction: isPartial ? partialAction : undefined,
+        rolloverDate: isPartial && partialAction === "rollover_next_month" ? rolloverDate : undefined,
+        rolloverInterest:
+          isPartial && partialAction === "rollover_next_month" && parsedInterest > 0
+            ? parsedInterest
+            : undefined,
+        rolloverCategoryId:
+          isPartial && partialAction === "rollover_next_month" ? rolloverCategoryId : undefined,
       });
       onOpenChange(false);
     } finally {
@@ -113,7 +154,7 @@ export function PayInvoiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg sm:max-w-xl">
+      <DialogContent className="max-w-lg sm:max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2.5">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -121,10 +162,14 @@ export function PayInvoiceDialog({
             </div>
             <div>
               <DialogTitle className="text-lg">
-                {`Pagar Fatura — ${cardName}`}
+                {isAlreadyPartiallyPaid
+                  ? `Pagar Saldo Restante — ${cardName}`
+                  : `Pagar Fatura — ${cardName}`}
               </DialogTitle>
               <DialogDescription className="text-xs">
-                Selecione a forma de pagamento, data e se o pagamento foi total ou parcial.
+                {isAlreadyPartiallyPaid
+                  ? "Informe quando foi feito o pagamento do restante, a forma utilizada ou transfira para a fatura seguinte."
+                  : "Selecione a forma de pagamento, data e se o pagamento foi total ou parcial."}
               </DialogDescription>
             </div>
           </div>
@@ -132,23 +177,54 @@ export function PayInvoiceDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-1">
           {/* Resumo do Valor da Fatura */}
-          <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/30 p-3.5">
-            <div>
-              <span className="text-xs text-muted-foreground uppercase font-semibold">
-                Total da Fatura
-              </span>
-              <p className="font-display text-xl font-bold text-foreground">
-                {brl(defaultPaymentTarget)}
-              </p>
-            </div>
-            <div className="text-right text-xs text-muted-foreground">
-              <span>{`${items.length} ${items.length === 1 ? "compra vinculada" : "compras vinculadas"}`}</span>
-            </div>
+          <div className="rounded-xl border border-border bg-secondary/30 p-3.5 space-y-2">
+            {isAlreadyPartiallyPaid ? (
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div>
+                  <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                    Total Original
+                  </span>
+                  <p className="font-semibold text-foreground">{brl(totalAmount)}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold">
+                    Já Pago
+                  </span>
+                  <p className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    {brl(paidAmountSoFar)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-rose-600 dark:text-rose-400 uppercase font-semibold">
+                    Saldo Restante
+                  </span>
+                  <p className="font-display text-base font-bold text-rose-600 dark:text-rose-400">
+                    {brl(openAmount)}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-muted-foreground uppercase font-semibold">
+                    Total da Fatura
+                  </span>
+                  <p className="font-display text-xl font-bold text-foreground">
+                    {brl(defaultPaymentTarget)}
+                  </p>
+                </div>
+                <div className="text-right text-xs text-muted-foreground">
+                  <span>{`${items.length} ${items.length === 1 ? "compra vinculada" : "compras vinculadas"}`}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Forma de Pagamento */}
           <div className="space-y-2">
-            <Label className="text-xs font-semibold">Como a fatura foi paga?</Label>
+            <Label className="text-xs font-semibold">
+              {isAlreadyPartiallyPaid ? "Como o restante foi pago?" : "Como a fatura foi paga?"}
+            </Label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <button
                 type="button"
@@ -221,7 +297,7 @@ export function PayInvoiceDialog({
           {paymentMethod === "credito" ? (
             <div className="space-y-1.5 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-3 animate-in fade-in duration-200">
               <Label className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">
-                Qual outro cartão foi usado para pagar esta fatura?
+                Qual outro cartão foi usado para pagar?
               </Label>
               <Select value={otherCardName} onValueChange={setOtherCardName}>
                 <SelectTrigger className="h-9 bg-card text-xs">
@@ -236,7 +312,7 @@ export function PayInvoiceDialog({
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground">
-                O valor desta fatura entrará como despesa no cartão selecionado.
+                O valor pago entrará como lançamento no cartão selecionado.
               </p>
             </div>
           ) : null}
@@ -245,7 +321,9 @@ export function PayInvoiceDialog({
           <div className="space-y-1.5">
             <Label htmlFor="pay-date" className="text-xs font-semibold flex items-center gap-1.5">
               <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-              Data do pagamento
+              {isAlreadyPartiallyPaid
+                ? "Quando foi feito o pagamento deste restante?"
+                : "Data em que o pagamento foi realizado"}
             </Label>
             <Input
               id="pay-date"
@@ -262,10 +340,14 @@ export function PayInvoiceDialog({
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="partial-switch" className="text-xs font-bold cursor-pointer">
-                  A fatura foi paga parcialmente?
+                  {isAlreadyPartiallyPaid
+                    ? "Pagar apenas uma parte do saldo restante?"
+                    : "A fatura foi paga parcialmente?"}
                 </Label>
                 <p className="text-[11px] text-muted-foreground">
-                  Ative se você não pagou o valor total da fatura
+                  {isAlreadyPartiallyPaid
+                    ? "Ative se este pagamento não quitou todo o saldo restante"
+                    : "Ative se você não pagou o valor total da fatura"}
                 </p>
               </div>
               <Switch
@@ -284,7 +366,7 @@ export function PayInvoiceDialog({
               <div className="space-y-3 pt-2 border-t border-border/60 animate-in fade-in duration-200">
                 <div className="space-y-1.5">
                   <Label htmlFor="partial-amount" className="text-xs font-semibold">
-                    Quanto foi pago nesta fatura? (R$)
+                    Quanto foi pago agora? (R$)
                   </Label>
                   <div className="relative">
                     <span className="absolute left-3 top-2 text-xs font-semibold text-muted-foreground">
@@ -334,29 +416,151 @@ export function PayInvoiceDialog({
                 {/* Resumo do Saldo Devedor */}
                 <div className="flex items-center justify-between rounded-lg bg-secondary/40 p-2.5 text-xs">
                   <div>
-                    <span className="text-muted-foreground">Valor pago:</span>
+                    <span className="text-muted-foreground">Valor pago agora:</span>
                     <p className="font-bold text-emerald-600 dark:text-emerald-400">
                       {brl(parsedPaidAmount)}
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className="text-muted-foreground">Saldo restante devedor:</span>
+                    <span className="text-muted-foreground">Saldo restante em aberto:</span>
                     <p className="font-bold text-rose-600 dark:text-rose-400">
                       {brl(remainingDebt)}
                     </p>
                   </div>
                 </div>
 
-                {/* Alerta de Juros */}
-                <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <p className="font-bold">Aviso de juros e encargos na próxima fatura:</p>
-                    <p className="text-[11px] leading-relaxed">
-                      {`O saldo devedor de ${brl(remainingDebt)} permanecerá em aberto com sinal de alerta no painel e acumulará juros rotativos na fatura do mês seguinte.`}
-                    </p>
+                {/* Opções de Destino para o Saldo Restante */}
+                <div className="space-y-2 pt-1">
+                  <Label className="text-xs font-semibold text-foreground">
+                    {`O que deseja fazer com o saldo restante de ${brl(remainingDebt)}?`}
+                  </Label>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPartialAction("keep_open")}
+                      className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all ${
+                        partialAction === "keep_open"
+                          ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary"
+                          : "border-border bg-card hover:bg-secondary/30 text-muted-foreground"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-primary">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>Manter em aberto nesta fatura</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1 leading-snug">
+                        Permite registrar quando foi feito o pagamento do restante mais tarde.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPartialAction("rollover_next_month")}
+                      className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all ${
+                        partialAction === "rollover_next_month"
+                          ? "border-amber-500 bg-amber-500/10 text-foreground ring-1 ring-amber-500"
+                          : "border-border bg-card hover:bg-secondary/30 text-muted-foreground"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-xs text-amber-700 dark:text-amber-300">
+                        <ArrowRight className="h-3.5 w-3.5" />
+                        <span>Jogar para a fatura seguinte</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1 leading-snug">
+                        {`Transfere o saldo devedor diretamente para a fatura de ${nextMonthName}.`}
+                      </p>
+                    </button>
                   </div>
                 </div>
+
+                {/* Configurações contextuais quando escolhe Rolar para a Fatura Seguinte */}
+                {partialAction === "rollover_next_month" ? (
+                  <div className="space-y-2.5 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 animate-in fade-in duration-200 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-amber-800 dark:text-amber-200">
+                        Transferência para {nextMonthName}/{tgtY}:
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="sub-rollover-date" className="text-[11px] font-medium">
+                          Data na próxima fatura
+                        </Label>
+                        <Input
+                          id="sub-rollover-date"
+                          type="date"
+                          value={rolloverDate}
+                          onChange={(e) => setRolloverDate(e.target.value)}
+                          className="h-8 text-xs bg-card"
+                          required={partialAction === "rollover_next_month"}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label htmlFor="sub-rollover-interest" className="text-[11px] font-medium flex items-center gap-1">
+                          <Percent className="h-3 w-3 text-rose-500" />
+                          Juros rotativos (opcional)
+                        </Label>
+                        <Input
+                          id="sub-rollover-interest"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={rolloverInterestStr}
+                          onChange={(e) => setRolloverInterestStr(e.target.value)}
+                          placeholder="0,00"
+                          className="h-8 text-xs bg-card"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-medium">
+                        Categoria na próxima fatura
+                      </Label>
+                      <Select
+                        value={rolloverCategoryId}
+                        onValueChange={setRolloverCategoryId}
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-card">
+                          <SelectValue placeholder="Selecione a categoria..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {expenseCategories.map((c) => (
+                            <SelectItem key={c.id} value={c.id} className="text-xs">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="h-2 w-2 rounded-full shrink-0"
+                                  style={{ backgroundColor: c.color }}
+                                />
+                                <span>{c.name}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-amber-500/20 text-[11px] font-semibold text-amber-900 dark:text-amber-100">
+                      <span>Total que irá para a fatura de {nextMonthName}:</span>
+                      <span className="font-bold text-foreground">
+                        {brl(remainingDebt + (parsedInterest > 0 ? parsedInterest : 0))}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="font-bold">Aviso:</p>
+                      <p className="text-[11px] leading-relaxed">
+                        {`O saldo devedor de ${brl(remainingDebt)} permanecerá em aberto nesta fatura até que você registre a data em que o restante foi pago.`}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : null}
           </div>
@@ -383,7 +587,9 @@ export function PayInvoiceDialog({
               {submitting
                 ? "Processando..."
                 : isPartial
-                  ? `Registrar Pagamento Parcial (${brl(parsedPaidAmount)})`
+                  ? partialAction === "rollover_next_month"
+                    ? `Pagar ${brl(parsedPaidAmount)} e Transferir Saldo`
+                    : `Registrar Pagamento Parcial (${brl(parsedPaidAmount)})`
                   : `Confirmar Pagamento (${brl(defaultPaymentTarget)})`}
             </Button>
           </DialogFooter>

@@ -635,6 +635,20 @@ export async function deleteInvoice(ids: string[]) {
   if (error) throw error;
 }
 
+export function getNextMonthDate(dateStr?: string): string {
+  const base = dateStr || new Date().toISOString().slice(0, 10);
+  const [y, m, d] = base.split("-").map(Number);
+  let nextY = y;
+  let nextM = m + 1;
+  if (nextM > 12) {
+    nextM = 1;
+    nextY += 1;
+  }
+  const maxDays = new Date(nextY, nextM, 0).getDate();
+  const nextD = Math.min(d || 10, maxDays);
+  return `${nextY}-${String(nextM).padStart(2, "0")}-${String(nextD).padStart(2, "0")}`;
+}
+
 export type PayInvoiceParams = {
   items: Transaction[];
   isPartial: boolean;
@@ -642,10 +656,83 @@ export type PayInvoiceParams = {
   paymentMethod: string;
   otherCardName?: string | null;
   paidAtDate: string; // YYYY-MM-DD
+  partialAction?: "keep_open" | "rollover_next_month";
+  rolloverDate?: string;
+  rolloverInterest?: number;
+  rolloverCategoryId?: string | null;
 };
 
+export type RolloverInvoiceParams = {
+  cardName: string;
+  items: Transaction[];
+  openAmount: number;
+  interestAmount?: number;
+  targetDate?: string; // YYYY-MM-DD
+  categoryId?: string | null;
+};
+
+export async function rolloverInvoiceDebt(params: RolloverInvoiceParams) {
+  const { cardName, items, openAmount, interestAmount = 0, targetDate, categoryId } = params;
+  if (items.length === 0 || openAmount <= 0) return;
+
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) throw new Error("Usuário não autenticado");
+
+  const refDate = items[0]?.occurred_on || new Date().toISOString().slice(0, 10);
+  const [y, m] = refDate.split("-").map(Number);
+  const nextDate = targetDate || getNextMonthDate(refDate);
+  const [tgtY, tgtM] = nextDate.split("-").map(Number);
+  const nextMonthName = MONTH_NAMES[tgtM - 1] ?? "Mês seguinte";
+
+  // 1. Marca os itens pendentes da fatura atual como transferidos/liquidados por rolagem
+  const unpaidItems = items.filter((i) => !i.is_paid);
+  for (const item of unpaidItems) {
+    await supabase
+      .from("transactions")
+      .update({
+        is_paid: true,
+        paid_at: new Date().toISOString(),
+        notes: `Saldo devedor transferido para a fatura de ${nextMonthName}/${tgtY}`,
+      })
+      .eq("id", item.id);
+  }
+
+  // 2. Insere a despesa de saldo anterior na fatura do mês seguinte
+  const totalAmount = Number((openAmount + (interestAmount > 0 ? interestAmount : 0)).toFixed(2));
+  const { error } = await supabase.from("transactions").insert({
+    user_id: userId,
+    kind: "expense",
+    description: `Saldo anterior fatura ${cardName} (${MONTH_NAMES[m - 1]}/${y})`,
+    amount: totalAmount,
+    occurred_on: nextDate,
+    category_id: categoryId ?? null,
+    payment_method: "credito",
+    card_name: cardName,
+    source: "fatura",
+    is_paid: false,
+    notes:
+      interestAmount > 0
+        ? `Saldo transferido da fatura anterior (${brl(openAmount)} + ${brl(interestAmount)} de juros/encargos)`
+        : `Saldo devedor transferido da fatura anterior (${MONTH_NAMES[m - 1]}/${y})`,
+  });
+
+  if (error) throw error;
+}
+
 export async function payInvoice(params: PayInvoiceParams) {
-  const { items, isPartial, paidAmount, paymentMethod, otherCardName, paidAtDate } = params;
+  const {
+    items,
+    isPartial,
+    paidAmount,
+    paymentMethod,
+    otherCardName,
+    paidAtDate,
+    partialAction = "keep_open",
+    rolloverDate,
+    rolloverInterest = 0,
+    rolloverCategoryId,
+  } = params;
   if (items.length === 0) return;
 
   const { data: auth } = await supabase.auth.getUser();
@@ -667,10 +754,18 @@ export async function payInvoice(params: PayInvoiceParams) {
               ? "Dinheiro / Conta"
               : paymentMethod;
 
+  const unpaidItems = items.filter((i) => !i.is_paid);
+  const targetItems = unpaidItems.length > 0 ? unpaidItems : items;
+  const targetTotal = targetItems.reduce((s, i) => s + i.amount, 0);
+
   if (!isPartial) {
-    // Pagamento integral
-    const itemIds = items.map((i) => i.id);
-    const noteText = `Fatura paga integralmente via ${paymentMethodLabel} em ${formatDate(paidAtDate)}`;
+    // Pagamento integral do saldo restante
+    const itemIds = targetItems.map((i) => i.id);
+    const hasPriorPaid = items.some((i) => i.is_paid);
+    const noteText = hasPriorPaid
+      ? `Saldo restante pago via ${paymentMethodLabel} em ${formatDate(paidAtDate)}`
+      : `Fatura paga integralmente via ${paymentMethodLabel} em ${formatDate(paidAtDate)}`;
+
     const { error } = await supabase
       .from("transactions")
       .update({
@@ -684,21 +779,33 @@ export async function payInvoice(params: PayInvoiceParams) {
   }
 
   // Pagamento Parcial
-  const total = items.reduce((s, i) => s + i.amount, 0);
-  const actualPaid = Math.max(0, Math.min(paidAmount, total));
+  const actualPaid = Math.max(0, Math.min(paidAmount, targetTotal));
   let remainingToPay = actualPaid;
+  const isRollover = partialAction === "rollover_next_month";
 
-  for (const item of items) {
+  for (const item of targetItems) {
     if (remainingToPay <= 0) {
-      // Itens não cobertos continuam em aberto com aviso de juros
-      await supabase
-        .from("transactions")
-        .update({
-          is_paid: false,
-          paid_at: null,
-          notes: "Saldo restante de fatura parcial — gerará juros na próxima fatura",
-        })
-        .eq("id", item.id);
+      if (isRollover) {
+        // Marcado como transferido para a próxima fatura
+        await supabase
+          .from("transactions")
+          .update({
+            is_paid: true,
+            paid_at: paidAtIso,
+            notes: "Saldo restante transferido para a fatura seguinte",
+          })
+          .eq("id", item.id);
+      } else {
+        // Continua em aberto nesta fatura
+        await supabase
+          .from("transactions")
+          .update({
+            is_paid: false,
+            paid_at: null,
+            notes: "Saldo restante de fatura parcial — gerará juros na próxima fatura",
+          })
+          .eq("id", item.id);
+      }
     } else if (item.amount <= remainingToPay + 0.001) {
       // Item totalmente pago pelo valor parcial
       await supabase
@@ -726,8 +833,8 @@ export async function payInvoice(params: PayInvoiceParams) {
         })
         .eq("id", item.id);
 
-      // Cria a parte restante como pendente
-      if (unpaidPortion > 0 && userId) {
+      // Se não for rolar para o mês seguinte, cria o saldo restante no mês atual
+      if (!isRollover && unpaidPortion > 0 && userId) {
         await supabase.from("transactions").insert({
           user_id: userId,
           kind: "expense",
@@ -745,6 +852,34 @@ export async function payInvoice(params: PayInvoiceParams) {
 
       remainingToPay = 0;
     }
+  }
+
+  // Se a opção de transferência para o próximo mês estiver ativa, lança o saldo restante na próxima fatura
+  const remainingDebt = Number((targetTotal - actualPaid).toFixed(2));
+  if (isRollover && remainingDebt > 0 && userId) {
+    const refDate = targetItems[0]?.occurred_on || paidAtDate;
+    const [y, m] = refDate.split("-").map(Number);
+    const nextDate = rolloverDate || getNextMonthDate(refDate);
+    const totalToTransfer = Number(
+      (remainingDebt + (rolloverInterest > 0 ? rolloverInterest : 0)).toFixed(2),
+    );
+
+    await supabase.from("transactions").insert({
+      user_id: userId,
+      kind: "expense",
+      description: `Saldo anterior fatura ${targetItems[0]?.card_name} (${MONTH_NAMES[m - 1]}/${y})`,
+      amount: totalToTransfer,
+      occurred_on: nextDate,
+      category_id: rolloverCategoryId ?? null,
+      payment_method: "credito",
+      card_name: targetItems[0]?.card_name,
+      source: "fatura",
+      is_paid: false,
+      notes:
+        rolloverInterest > 0
+          ? `Saldo transferido da fatura anterior (${brl(remainingDebt)} + ${brl(rolloverInterest)} de juros/encargos)`
+          : `Saldo devedor transferido da fatura anterior (${MONTH_NAMES[m - 1]}/${y})`,
+    });
   }
 }
 

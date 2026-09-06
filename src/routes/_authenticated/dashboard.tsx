@@ -1,44 +1,31 @@
-import { useEffect, useMemo, useState } from "react";
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
-  BarChart3,
-  Bell,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
+  CalendarRange,
   CircleDollarSign,
-  Clock3,
   CreditCard,
-  Download,
-  LogOut,
+  FileSpreadsheet,
+  FileUp,
+  Mail,
   Plus,
-  Sparkles,
   TrendingDown,
   TrendingUp,
   Wallet,
 } from "lucide-react";
-import { toast } from "sonner";
-import { exportYearToExcel } from "@/lib/export";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatCard } from "@/components/finance/StatCard";
-import { CategoryBreakdown } from "@/components/finance/CategoryBreakdown";
-import { YearOverview } from "@/components/finance/YearOverview";
+import { MonthPicker } from "@/components/finance/MonthPicker";
 import { TransactionList } from "@/components/finance/TransactionList";
 import { TransactionDialog } from "@/components/finance/TransactionDialog";
 import { InvoiceImportDialog } from "@/components/finance/InvoiceImportDialog";
 import { EmailNotificationDialog } from "@/components/finance/EmailNotificationDialog";
+import { CategoryBreakdown } from "@/components/finance/CategoryBreakdown";
+import { YearOverview } from "@/components/finance/YearOverview";
 import { AnnualSummaryView } from "@/components/finance/AnnualSummaryView";
+import { exportMonthToExcel, exportYearToExcel } from "@/lib/export";
 import {
   AVAILABLE_YEARS,
   MONTH_NAMES,
@@ -55,11 +42,13 @@ import {
   isCreditCardExpense,
   isDirectExpense,
   payInvoice,
+  rolloverInvoiceDebt,
   togglePaid,
   toggleBatchPaid,
   updateTransaction,
   type Kind,
   type PayInvoiceParams,
+  type RolloverInvoiceParams,
   type Transaction,
   type TransactionInput,
 } from "@/lib/finance";
@@ -81,169 +70,121 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
       },
     ],
   }),
-  component: Dashboard,
-  errorComponent: DashboardError,
-
+  component: DashboardPage,
 });
 
-function DashboardError({ error, reset }: { error: Error; reset: () => void }) {
-  const router = useRouter();
-  return (
-    <main className="mx-auto flex min-h-[60vh] w-full max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
-      <h1 className="font-display text-xl font-semibold">Algo deu errado no painel</h1>
-      <p className="text-sm text-muted-foreground">{error.message}</p>
-      <Button
-        onClick={() => {
-          void router.invalidate();
-          reset();
-        }}
-      >
-        Tentar novamente
-      </Button>
-    </main>
-  );
-}
-
-
-
-function Dashboard() {
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-
-  const signOut = async () => {
-    await queryClient.cancelQueries();
-    queryClient.clear();
-    await supabase.auth.signOut();
-    await navigate({ to: "/auth", replace: true });
-  };
+function DashboardPage() {
+  const qc = useQueryClient();
   const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
+  const [year, setYear] = useState<number>(now.getFullYear());
+  const [month, setMonth] = useState<number>(now.getMonth());
   const [activeTab, setActiveTab] = useState<"month" | "year">("month");
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [userEmail, setUserEmail] = useState("");
+  const [emailOpen, setEmailOpen] = useState(false);
   const [defaultKind, setDefaultKind] = useState<Kind>("expense");
   const [editing, setEditing] = useState<Transaction | null>(null);
 
-  useEffect(() => {
-    void supabase.auth.getUser().then(({ data }) => {
-      if (data?.user?.email) setUserEmail(data.user.email);
-    });
-  }, []);
-
-  const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
-  const monthQuery = useQuery({
+  const transactionsQuery = useQuery({
     queryKey: ["transactions", year, month],
     queryFn: () => fetchTransactions(year, month),
   });
+
   const historyQuery = useQuery({
-    queryKey: ["history", year],
+    queryKey: ["monthly_history", year],
     queryFn: () => fetchMonthlyHistory(year),
   });
+
   const yearQuery = useQuery({
-    queryKey: ["year-transactions", year],
+    queryKey: ["transactions_year", year],
     queryFn: () => fetchYearTransactions(year),
   });
+
   const allHistoryQuery = useQuery({
-    queryKey: ["all-history"],
+    queryKey: ["monthly_history_all"],
     queryFn: fetchAllYearsHistory,
   });
+
   const allTransactionsQuery = useQuery({
-    queryKey: ["all-transactions"],
+    queryKey: ["transactions_all"],
     queryFn: fetchAllYearsTransactions,
   });
 
-  const categories = categoriesQuery.data ?? [];
-  const transactions = useMemo(() => monthQuery.data ?? [], [monthQuery.data]);
-  const monthHistory = useMemo(
-    () => (historyQuery.data ?? []).find((h) => h.month === month + 1),
-    [historyQuery.data, month],
-  );
+  const categoriesQuery = useQuery({ queryKey: ["categories"], queryFn: fetchCategories });
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const dueTodayExpenses = useMemo(() => {
-    return transactions.filter(
-      (t) => t.kind === "expense" && !t.is_paid && t.occurred_on === todayStr,
-    );
-  }, [transactions, todayStr]);
-
-  const totalDueToday = useMemo(() => {
-    return dueTodayExpenses.reduce((sum, t) => sum + t.amount, 0);
-  }, [dueTodayExpenses]);
+  const transactions = transactionsQuery.data ?? [];
+  const monthHistory = historyQuery.data?.find((h) => h.month === month + 1);
 
   const totals = useMemo(() => {
-    // Gastos pagos no cartão de crédito (compras no cartão + faturas pagas com cartão de crédito)
+    // 1. Entradas (prioriza transações cadastradas no app se existirem)
+    const directIncome = transactions
+      .filter((t) => t.kind === "income")
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // 2. Despesas à vista / pagas diretamente em caixa
+    const directExpenses = transactions
+      .filter(isDirectExpense)
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // 3. Compras no cartão de crédito
     const creditCardExpenses = transactions
       .filter(isCreditCardExpense)
-      .reduce((s, t) => s + t.amount, 0);
+      .reduce((sum, t) => sum + t.amount, 0);
 
-    // Se o mês possui lançamentos no app, usa os lançamentos reais; senão, usa o histórico da planilha
+    // Se o mês já tem transações reais cadastradas, usa estritamente o valor calculado e não soma valores legados de planilha
     const hasTransactions = transactions.length > 0;
     const baseExpenses = hasTransactions ? 0 : (monthHistory?.expenses ?? 0);
     const baseIncome = hasTransactions ? 0 : (monthHistory?.income ?? 0);
 
-    // Gastos diretos do mês (Pix, Dinheiro, Débito, Boleto, Faturas pagas à vista/débito/pix)
-    const expenses =
-      baseExpenses +
-      transactions.filter(isDirectExpense).reduce((s, t) => s + t.amount, 0);
-
-    const income =
-      baseIncome +
-      transactions.filter((t) => t.kind === "income").reduce((s, t) => s + t.amount, 0);
-
-    // Todas as despesas em aberto do mês (Pix, Boleto, Débito, Dinheiro, Cartão manual e Faturas)
-    const pending = transactions
-      .filter((t) => t.kind === "expense" && !t.is_paid)
-      .reduce((s, t) => s + t.amount, 0);
-
-    // Saldo = Entradas - Gastos Diretos do mês (não desconta gastos no cartão de crédito)
+    const expenses = baseExpenses + directExpenses;
+    const income = baseIncome + directIncome;
     const balance = income - expenses;
 
-    return { expenses, creditCardExpenses, income, pending, balance };
+    return {
+      expenses,
+      directExpenses,
+      creditCardExpenses,
+      income,
+      balance,
+    };
   }, [transactions, monthHistory]);
 
+  const categories = categoriesQuery.data ?? [];
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: ["transactions"] });
-    void queryClient.invalidateQueries({ queryKey: ["year-transactions"] });
-    void queryClient.invalidateQueries({ queryKey: ["all-history"] });
-    void queryClient.invalidateQueries({ queryKey: ["all-transactions"] });
+    qc.invalidateQueries({ queryKey: ["transactions"] });
+    qc.invalidateQueries({ queryKey: ["transactions_year"] });
+    qc.invalidateQueries({ queryKey: ["transactions_all"] });
+    qc.invalidateQueries({ queryKey: ["monthly_history"] });
+    qc.invalidateQueries({ queryKey: ["monthly_history_all"] });
+    qc.invalidateQueries({ queryKey: ["categories"] });
   };
 
   const saveMutation = useMutation({
-    mutationFn: async (values: TransactionInput | TransactionInput[]) => {
-      if (editing) {
-        const single = Array.isArray(values) ? values[0] : values;
-        if (!single) return;
-        await updateTransaction(editing.id, single);
+    mutationFn: async (input: TransactionInput | TransactionInput[]) => {
+      if (Array.isArray(input)) {
+        await createTransactions(input);
+      } else if (editing) {
+        await updateTransaction(editing.id, input);
       } else {
-        const rows = Array.isArray(values) ? values : [values];
-        if (rows.length === 0) return;
-        await createTransactions(rows);
+        await createTransactions([input]);
       }
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       invalidate();
-      const isMultiple = Array.isArray(variables) && variables.length > 1;
-      if (editing) {
-        toast.success("Lançamento atualizado");
-      } else if (isMultiple) {
-        toast.success(
-          `${(variables as TransactionInput[]).length} lançamentos recorrentes adicionados com sucesso!`,
-        );
-      } else {
-        toast.success("Lançamento adicionado");
-      }
       setEditing(null);
+      toast.success(editing ? "Lançamento atualizado!" : "Lançamento criado!");
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const paidMutation = useMutation({
     mutationFn: (t: Transaction) => togglePaid(t.id, !t.is_paid),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      toast.success("Status atualizado!");
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -264,14 +205,31 @@ function Dashboard() {
     onSuccess: (_, variables) => {
       invalidate();
       if (variables.isPartial) {
-        toast.warning(
-          `Pagamento parcial de ${brl(variables.paidAmount)} registrado! O saldo devedor restante gerará juros na próxima fatura.`,
-        );
+        if (variables.partialAction === "rollover_next_month") {
+          toast.success(
+            `Pagamento de ${brl(variables.paidAmount)} registrado! O saldo devedor restante foi transferido para a fatura seguinte.`,
+          );
+        } else {
+          toast.warning(
+            `Pagamento parcial de ${brl(variables.paidAmount)} registrado! O saldo restante continuará em aberto nesta fatura.`,
+          );
+        }
       } else {
         toast.success(
           `Fatura de ${variables.items[0]?.card_name ?? "cartão"} marcada como paga!`,
         );
       }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const rolloverInvoiceMutation = useMutation({
+    mutationFn: (params: RolloverInvoiceParams) => rolloverInvoiceDebt(params),
+    onSuccess: (_, variables) => {
+      invalidate();
+      toast.success(
+        `Saldo devedor de ${brl(variables.openAmount)} transferido para a fatura seguinte do cartão ${variables.cardName}!`,
+      );
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -299,12 +257,6 @@ function Dashboard() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const shiftMonth = (delta: number) => {
-    const next = new Date(year, month + delta, 1);
-    setYear(next.getFullYear());
-    setMonth(next.getMonth());
-  };
-
   const openNew = (kind: Kind) => {
     setEditing(null);
     setDefaultKind(kind);
@@ -312,242 +264,190 @@ function Dashboard() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      <header className="flex flex-wrap items-center justify-between gap-4">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Header Principal do Dashboard */}
+      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Finanças pessoais
-          </p>
-          <h1 className="mt-1 text-3xl font-semibold">
-            <span className="text-gradient">Meu painel financeiro</span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+            Controle de Finanças
+          </span>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            Painel Financeiro
           </h1>
+          <p className="text-xs text-muted-foreground">
+            {activeTab === "month"
+              ? `Visão detalhada de ${MONTH_NAMES[month]} de ${year}`
+              : `Panorama consolidado do ano de ${year}`}
+          </p>
         </div>
 
+        {/* Barra de Ações Rápidas */}
         <div className="flex flex-wrap items-center gap-2">
           {activeTab === "month" ? (
-            <div className="flex items-center gap-1 rounded-xl border border-border bg-secondary/40 p-1">
-              <Button variant="ghost" size="icon" onClick={() => shiftMonth(-1)} aria-label="Mês anterior">
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Select
-                value={String(month)}
-                onValueChange={(v) => setMonth(Number(v))}
-              >
-                <SelectTrigger className="h-9 w-32 border-0 bg-transparent text-sm font-medium">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MONTH_NAMES.map((name, i) => (
-                    <SelectItem key={name} value={String(i)}>
-                      {name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-                <SelectTrigger className="h-9 w-24 border-0 bg-transparent text-sm font-medium">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {AVAILABLE_YEARS.map((y) => (
-                    <SelectItem key={y} value={String(y)}>
-                      {y}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="ghost" size="icon" onClick={() => shiftMonth(1)} aria-label="Próximo mês">
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                exportMonthToExcel(
+                  year,
+                  month,
+                  transactions,
+                  categories,
+                  monthHistory,
+                )
+              }
+              className="gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 dark:text-emerald-400"
+              title="Exportar dados do mês para planilha Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Exportar Mês (Excel)</span>
+            </Button>
           ) : (
-            <div className="flex items-center gap-1 rounded-xl border border-border bg-secondary/40 p-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setYear((prev) => prev - 1)}
-                aria-label="Ano anterior"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-                <SelectTrigger className="h-9 w-28 border-0 bg-transparent text-sm font-medium font-semibold">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {AVAILABLE_YEARS.map((y) => (
-                    <SelectItem key={y} value={String(y)}>
-                      {y}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setYear((prev) => prev + 1)}
-                aria-label="Próximo ano"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                exportYearToExcel(year, yearQuery.data ?? [], categories, historyQuery.data ?? [])
+              }
+              className="gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 dark:text-emerald-400"
+              title="Exportar todos os meses do ano para planilha Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Exportar Ano Completo (Excel)</span>
+            </Button>
           )}
 
           <Button
-            variant="ghost"
-            onClick={() => {
-              exportYearToExcel(year, yearQuery.data ?? [], categories, historyQuery.data ?? []);
-              toast.success(`Planilha de ${year} exportada`);
-            }}
+            variant="outline"
+            size="sm"
+            onClick={() => setEmailOpen(true)}
+            className="gap-1.5 text-xs text-indigo-600 dark:text-indigo-400"
           >
-            <Download className="mr-2 h-4 w-4" />
-            Exportar
+            <Mail className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Alertas por E-mail</span>
           </Button>
-          <Button variant="secondary" onClick={() => setImportOpen(true)}>
-            <Sparkles className="mr-2 h-4 w-4" />
-            Importar fatura
-          </Button>
+
           <Button
-            variant="ghost"
-            size="icon"
-            className="relative"
-            title="Lembretes por e-mail"
-            onClick={() => setNotificationOpen(true)}
+            variant="outline"
+            size="sm"
+            onClick={() => setImportOpen(true)}
+            className="gap-1.5 text-xs"
           >
-            <Bell className="h-4 w-4" />
-            {dueTodayExpenses.length > 0 ? (
-              <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white shadow-xs">
-                {dueTodayExpenses.length}
-              </span>
-            ) : null}
+            <FileUp className="h-3.5 w-3.5 text-primary" />
+            <span className="hidden sm:inline">Importar Fatura</span>
+            <span className="sm:hidden">Importar</span>
           </Button>
-          <Button variant="outline" onClick={() => openNew("income")}>
-            <TrendingUp className="mr-2 h-4 w-4" />
-            Entrada
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openNew("income")}
+            className="gap-1.5 text-xs text-primary"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Receita</span>
           </Button>
-          <Button onClick={() => openNew("expense")}>
-            <Plus className="mr-2 h-4 w-4" />
-            Despesa
-          </Button>
-          <Button variant="ghost" size="icon" title="Sair" onClick={() => void signOut()}>
-            <LogOut className="h-4 w-4" />
+
+          <Button size="sm" onClick={() => openNew("expense")} className="gap-1.5 text-xs">
+            <Plus className="h-3.5 w-3.5" />
+            <span>Despesa</span>
           </Button>
         </div>
       </header>
 
-      {/* Barra de Navegação de Abas: Visão Mensal vs Resumo do Ano */}
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-b border-border/70 pb-3">
-        <div className="flex items-center gap-1.5 rounded-xl bg-secondary/50 p-1 border border-border/40">
-          <Button
-            type="button"
-            variant={activeTab === "month" ? "default" : "ghost"}
-            size="sm"
-            className="h-8 text-xs gap-1.5 font-medium rounded-lg"
-            onClick={() => setActiveTab("month")}
-          >
-            <Calendar className="h-3.5 w-3.5" />
-            <span>Visão Mensal</span>
-            <span className="text-[10px] opacity-80">{`(${MONTH_NAMES[month]} ${year})`}</span>
-          </Button>
-
-          <Button
-            type="button"
-            variant={activeTab === "year" ? "default" : "ghost"}
-            size="sm"
-            className="h-8 text-xs gap-1.5 font-medium rounded-lg"
-            onClick={() => setActiveTab("year")}
-          >
-            <BarChart3 className="h-3.5 w-3.5" />
-            <span>Resumo do Ano</span>
-            <span className="text-[10px] opacity-80">{`(${year})`}</span>
-          </Button>
-        </div>
+      {/* Navegação entre Abas: Mês a Mês vs Resumo Anual */}
+      <div className="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-3">
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as "month" | "year")}
+          className="w-full sm:w-auto"
+        >
+          <TabsList className="grid w-full grid-cols-2 sm:w-auto bg-secondary/60">
+            <TabsTrigger value="month" className="text-xs font-semibold gap-1.5">
+              <CircleDollarSign className="h-3.5 w-3.5" />
+              <span>Mês a Mês</span>
+            </TabsTrigger>
+            <TabsTrigger value="year" className="text-xs font-semibold gap-1.5">
+              <CalendarRange className="h-3.5 w-3.5" />
+              <span>Resumo do Ano</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {activeTab === "month" ? (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>Visualizando:</span>
-            <Badge variant="outline" className="text-xs font-semibold text-foreground">
-              {`${MONTH_NAMES[month]} de ${year}`}
-            </Badge>
-          </div>
+          <MonthPicker
+            year={year}
+            month={month}
+            onMonthChange={(m) => setMonth(m)}
+            onYearChange={(y) => setYear(y)}
+          />
         ) : (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>Visão consolidada de:</span>
-            <Badge variant="outline" className="text-xs font-semibold text-foreground">
-              {`Ano ${year}`}
-            </Badge>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground font-medium">Ano em análise:</span>
+            <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-1">
+              {AVAILABLE_YEARS.map((y) => (
+                <button
+                  key={y}
+                  onClick={() => setYear(y)}
+                  className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    y === year
+                      ? "bg-primary text-primary-foreground shadow-xs"
+                      : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                  }`}
+                >
+                  {y}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
 
       {activeTab === "month" ? (
-        /* Conteúdo dinâmico do mês selecionado com chave estável */
-        <div key={`month-view-${year}-${month}`} className="mt-6 space-y-6 animate-in fade-in duration-200">
-          {/* Banner de Lembrete: Contas Vencendo Hoje em Aberto */}
-          {dueTodayExpenses.length > 0 ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-800 dark:text-amber-200 shadow-xs">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400">
-                  <Bell className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="font-semibold text-sm text-foreground">
-                    {`Você tem ${dueTodayExpenses.length} ${dueTodayExpenses.length === 1 ? "conta" : "contas"} vencendo hoje (${brl(totalDueToday)}) em aberto`}
-                  </p>
-                  <p className="text-muted-foreground text-[11px] mt-0.5">
-                    Os lembretes são enviados de forma 100% automática por e-mail no dia do vencimento.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs border-amber-500/40 text-amber-800 dark:text-amber-200 hover:bg-amber-500/20"
-                  onClick={() => setNotificationOpen(true)}
-                >
-                  <Bell className="mr-1.5 h-3.5 w-3.5" />
-                  Ver lembretes por e-mail
-                </Button>
-              </div>
-            </div>
-          ) : null}
-
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        /* Aba de Visualização Mensal */
+        <div key={`month-view-${year}-${month}`} className="mt-6 space-y-6">
+          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
-              label="Entradas do mês"
-              value={totals.income}
-              icon={TrendingUp}
-              tone="primary"
-              {...(monthHistory && transactions.length === 0 ? { hint: "Histórico da planilha" } : {})}
-            />
-            <StatCard
-              label="Gastos do mês"
-              value={totals.expenses}
-              icon={TrendingDown}
-              tone="danger"
-              hint="Débito, Pix, Dinheiro e Faturas pagas"
-            />
-            <StatCard
-              label="Gastos do mês pagos com cartão de crédito"
-              value={totals.creditCardExpenses}
-              icon={CreditCard}
-              tone="indigo"
-              hint="Entrarão nas faturas futuras"
-            />
-
-            <StatCard
-              label="Saldo"
-              value={totals.balance}
+              title="Saldo do mês"
+              value={brl(totals.balance)}
               icon={Wallet}
-              tone={totals.balance >= 0 ? "primary" : "danger"}
-              hint={totals.balance >= 0 ? "Você está no azul" : "Atenção ao vermelho"}
+              tone={totals.balance >= 0 ? "success" : "danger"}
+              hint={
+                totals.balance >= 0
+                  ? "Resultado positivo no período"
+                  : "Gastos superaram as receitas"
+              }
             />
             <StatCard
-              label="A pagar"
-              value={totals.pending}
-              icon={Clock3}
+              title="Entradas do mês"
+              value={brl(totals.income)}
+              icon={TrendingUp}
+              tone="success"
+              hint={
+                transactions.length === 0 && monthHistory
+                  ? "Histórico da planilha"
+                  : `${transactions.filter((t) => t.kind === "income").length} receitas lançadas`
+              }
+            />
+            <StatCard
+              title="Gastos pagos / à vista"
+              value={brl(totals.expenses)}
+              icon={TrendingDown}
+              tone="default"
+              hint={
+                transactions.length === 0 && monthHistory
+                  ? "Histórico da planilha"
+                  : `${transactions.filter(isDirectExpense).length} despesas quitadas em caixa`
+              }
+            />
+            <StatCard
+              title="A pagar (em aberto)"
+              value={brl(
+                transactions
+                  .filter((t) => t.kind === "expense" && !t.is_paid)
+                  .reduce((sum, t) => sum + t.amount, 0),
+              )}
+              icon={CreditCard}
               tone="warning"
               hint={`${transactions.filter((t) => t.kind === "expense" && !t.is_paid).length} contas em aberto`}
             />
@@ -566,6 +466,9 @@ function Dashboard() {
               onToggleBatchPaid={(ids, isPaid) => batchPaidMutation.mutate({ ids, isPaid })}
               onPayInvoice={async (params) => {
                 await payInvoiceMutation.mutateAsync(params);
+              }}
+              onRolloverInvoice={async (params) => {
+                await rolloverInvoiceMutation.mutateAsync(params);
               }}
               onDeleteInvoice={async (cardName, items) => {
                 await deleteInvoiceMutation.mutateAsync({
@@ -638,20 +541,26 @@ function Dashboard() {
         open={importOpen}
         onOpenChange={setImportOpen}
         categories={categories}
-        defaultDate={`${year}-${String(month + 1).padStart(2, "0")}-10`}
-        onConfirm={async (rows) => {
-          await createTransactions(rows);
+        onImportSuccess={(card, count, firstDate) => {
           invalidate();
+          if (firstDate) {
+            const [y, m] = firstDate.split("-").map(Number);
+            if (y && m) {
+              setYear(y);
+              setMonth(m - 1);
+            }
+          }
         }}
       />
 
       <EmailNotificationDialog
-        open={notificationOpen}
-        onOpenChange={setNotificationOpen}
-        userEmail={userEmail}
+        open={emailOpen}
+        onOpenChange={setEmailOpen}
         transactions={transactions}
         categories={categories}
+        year={year}
+        month={month}
       />
-    </main>
+    </div>
   );
 }
