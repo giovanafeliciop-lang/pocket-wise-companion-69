@@ -103,7 +103,8 @@ export function PayInvoiceDialog({
       setRolloverCategoryId(jurosCategory?.id ?? expenseCategories[0]?.id ?? "");
       setSubmitting(false);
     }
-  }, [open, defaultPaymentTarget, todayStr, refDate, jurosCategory?.id, expenseCategories]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const parsedPaidAmount = Number(paidAmountStr.replace(",", ".")) || 0;
   const remainingDebt = Math.max(0, defaultPaymentTarget - parsedPaidAmount);
