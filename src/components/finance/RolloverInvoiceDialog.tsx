@@ -77,7 +77,8 @@ export function RolloverInvoiceDialog({
       setSelectedCategory(jurosCategory?.id ?? expenseCategories[0]?.id ?? "");
       setSubmitting(false);
     }
-  }, [open, refDate, jurosCategory?.id, expenseCategories]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const [tgtY, tgtM] = (targetDate || defaultNextDate).split("-").map(Number);
   const targetMonthName = MONTH_NAMES[(tgtM || 1) - 1] ?? "Próximo mês";
