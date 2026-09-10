@@ -39,6 +39,10 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
+  const isStaleAssetError = /Failed to fetch dynamically imported module|Importing a module script failed/i.test(
+    error.message,
+  );
+
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
@@ -55,6 +59,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
+              if (isStaleAssetError) {
+                window.location.reload();
+                return;
+              }
               router.invalidate();
               reset();
             }}
@@ -116,6 +124,11 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="pt-BR" className="notranslate" translate="no">
       <head>
         <HeadContent />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){window.addEventListener("vite:preloadError",function(event){event.preventDefault();var key="wallet-preload-recovery";var failed=event.payload&&event.payload.message?event.payload.message:"asset";try{if(sessionStorage.getItem(key)===failed)return;sessionStorage.setItem(key,failed);}catch(e){}var url=new URL(window.location.href);url.searchParams.set("app-refresh",Date.now().toString());window.location.replace(url.toString());});})();`,
+          }}
+        />
       </head>
       <body>
         {children}
@@ -127,6 +140,13 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("app-refresh")) return;
+    url.searchParams.delete("app-refresh");
+    window.history.replaceState(window.history.state, "", url.toString());
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
